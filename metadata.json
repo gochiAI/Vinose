@@ -1,0 +1,5 @@
+{
+  "name": "Visual Novel Scenario Editor",
+  "description": "A web application for centrally managing scenarios and related assets (characters, locations, items) for adventure and visual novel game development. Features include a timeline-based scene editor, a project database, and JSON data import/export capabilities.",
+  "requestFramePermissions": []
+}
