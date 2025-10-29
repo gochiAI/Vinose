@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface ViewSwitcherProps {
   currentView: 'timeline' | 'characterGraph';
@@ -6,23 +7,25 @@ interface ViewSwitcherProps {
 }
 
 export const ViewSwitcher: React.FC<ViewSwitcherProps> = ({ currentView, onViewChange }) => {
+  const { t, language } = useSettings();
+
   return (
     <div className="flex bg-secondary p-1 rounded-lg">
       <button
         onClick={() => onViewChange('timeline')}
         className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-          currentView === 'timeline' ? 'bg-tertiary text-white' : 'text-text-secondary hover:bg-border-color'
+          currentView === 'timeline' ? 'bg-card text-foreground' : 'text-muted-foreground hover:bg-border'
         }`}
       >
-        Timeline
+        {t('timeline', language)}
       </button>
       <button
         onClick={() => onViewChange('characterGraph')}
         className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-          currentView === 'characterGraph' ? 'bg-tertiary text-white' : 'text-text-secondary hover:bg-border-color'
+          currentView === 'characterGraph' ? 'bg-card text-foreground' : 'text-muted-foreground hover:bg-border'
         }`}
       >
-        Character Graph
+        {t('characterGraph', language)}
       </button>
     </div>
   );

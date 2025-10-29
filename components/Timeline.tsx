@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useRef, useCallback } from 'react';
-import { Scene, EventType } from '../types';
+import { Scene, EventType, GoToSceneEvent, ChoiceEvent } from '../types';
 import { Button } from './ui/Button';
 import { PlusIcon } from './icons/PlusIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { MinusIcon } from './icons/MinusIcon';
 import { HomeIcon } from './icons/HomeIcon';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface TimelineProps {
   scenes: Scene[];
@@ -25,13 +26,15 @@ const getCurvePath = (x1: number, y1: number, x2: number, y2: number): string =>
   return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
 };
 
-const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onDelete }: {
+const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onDelete, t, language }: {
     scene: Scene;
     index: number;
     position: { x: number; y: number };
     isSelected: boolean;
     onClick: () => void;
     onDelete: (e: React.MouseEvent) => void;
+    t: (key: any, lang: any) => string;
+    language: 'en' | 'ja';
 }) => (
     <div
       style={{
@@ -41,24 +44,24 @@ const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onD
         height: NODE_HEIGHT,
       }}
       className={`absolute p-2 rounded-lg cursor-pointer transition-all duration-200 flex flex-col justify-center scene-node ${
-        isSelected ? 'bg-tertiary ring-2 ring-accent shadow-lg' : 'bg-secondary hover:bg-tertiary shadow-md'
+        isSelected ? 'bg-secondary ring-2 ring-ring shadow-lg' : 'bg-card hover:bg-secondary shadow-md'
       }`}
       onClick={onClick}
     >
         <div className="flex justify-between items-start">
-            <h3 className="font-bold text-sm text-text-primary truncate" title={scene.title || 'Untitled Scene'}>
-                Scene {index + 1}: {scene.title || 'Untitled Scene'}
+            <h3 className="font-bold text-sm text-foreground truncate" title={scene.title || t('untitledScene', language)}>
+                {t('scene', language)} {index + 1}: {scene.title || t('untitledScene', language)}
             </h3>
             <button
                 onClick={onDelete}
-                className="p-1 rounded-full text-text-secondary hover:bg-border-color hover:text-red-500 flex-shrink-0"
-                title="Delete Scene"
+                className="p-1 rounded-full text-muted-foreground hover:bg-border hover:text-danger flex-shrink-0"
+                title={t('deleteScene', language)}
             >
                 <TrashIcon className="w-4 h-4" />
             </button>
         </div>
-        <p className="text-xs text-text-secondary mt-1">
-            {scene.events.length} event{scene.events.length !== 1 ? 's' : ''}
+        <p className="text-xs text-muted-foreground mt-1">
+            {scene.events.length} {scene.events.length !== 1 ? t('events', language) : t('event', language)}
         </p>
     </div>
 ));
@@ -68,20 +71,25 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const { t, language } = useSettings();
   
   const { nodePositions, edges, contentSize } = useMemo(() => {
     const positions: { [key: string]: { x: number; y: number } } = {};
     const calculatedEdges: { from: string; to: string }[] = [];
-    const sceneMap = new Map(scenes.map(s => [s.id, s]));
+    const sceneMap: Map<string, Scene> = new Map(scenes.map(s => [s.id, s]));
 
     const columns: Scene[][] = [];
     const placedScenes = new Set<string>();
 
     let currentColumnScenes = scenes.filter(s => !scenes.some(other => 
         other.events
-            .filter(e => e.type === EventType.CHOICE)
-            .flatMap(e => (e as any).choices)
-            .some(c => c.nextSceneId === s.id)
+            .filter(e => e.type === EventType.CHOICE || e.type === EventType.GOTO_SCENE)
+            .flatMap(e => {
+                if (e.type === EventType.CHOICE) return (e as ChoiceEvent).choices.map(c => c.nextSceneId);
+                if (e.type === EventType.GOTO_SCENE) return [(e as GoToSceneEvent).nextSceneId];
+                return [];
+            })
+            .some(nextId => nextId === s.id)
     ));
     if(currentColumnScenes.length === 0 && scenes.length > 0) {
         currentColumnScenes = [scenes[0]];
@@ -93,11 +101,16 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
       const nextColumnScenes = new Set<Scene>();
       currentColumnScenes.forEach(scene => {
         scene.events
-          .filter(e => e.type === EventType.CHOICE)
-          .flatMap(e => (e as any).choices)
-          .forEach(c => {
-            if (c.nextSceneId && sceneMap.has(c.nextSceneId) && !placedScenes.has(c.nextSceneId)) {
-              nextColumnScenes.add(sceneMap.get(c.nextSceneId)!);
+          .filter(e => e.type === EventType.CHOICE || e.type === EventType.GOTO_SCENE)
+          .flatMap(e => {
+            if (e.type === EventType.CHOICE) return (e as ChoiceEvent).choices.map(c => c.nextSceneId);
+            if (e.type === EventType.GOTO_SCENE) return [(e as GoToSceneEvent).nextSceneId];
+            return [];
+          })
+          .forEach(nextId => {
+            if (nextId && sceneMap.has(nextId) && !placedScenes.has(nextId)) {
+              // FIX: Explicitly typing `sceneMap` above ensures that `sceneMap.get()` correctly returns a `Scene` type.
+              nextColumnScenes.add(sceneMap.get(nextId)!);
             }
           });
       });
@@ -126,11 +139,16 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
     scenes.forEach(scene => {
         scene.events.forEach(event => {
             if (event.type === EventType.CHOICE) {
-                (event as any).choices.forEach((choice: any) => {
+                (event as ChoiceEvent).choices.forEach((choice) => {
                     if (choice.nextSceneId && positions[choice.nextSceneId]) {
                         calculatedEdges.push({ from: scene.id, to: choice.nextSceneId });
                     }
                 });
+            } else if (event.type === EventType.GOTO_SCENE) {
+                const goToEvent = event as GoToSceneEvent;
+                if (goToEvent.nextSceneId && positions[goToEvent.nextSceneId]) {
+                    calculatedEdges.push({ from: scene.id, to: goToEvent.nextSceneId });
+                }
             }
         });
     });
@@ -228,16 +246,11 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
       }
   };
 
-  const handleAddScene = () => {
-    // This function is now handled in App.tsx to select the new scene
-    // Kept for potential future use or can be removed
-  };
-
   return (
     <div className="flex-1 relative">
         <div 
             ref={containerRef}
-            className="w-full h-full bg-primary border-2 border-dashed border-tertiary rounded-lg overflow-hidden relative cursor-grab"
+            className="w-full h-full bg-background border-2 border-dashed border-border rounded-lg overflow-hidden relative cursor-grab"
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -252,6 +265,8 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
                     width={contentSize.width}
                     height={contentSize.height}
                     className="absolute top-0 left-0"
+                    // The color is taken from the border color which adapts to the theme
+                    style={{ color: 'var(--border)'}}
                 >
                     <defs>
                         <marker
@@ -263,7 +278,7 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
                             orient="auto"
                             markerUnits="strokeWidth"
                         >
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#4e5058" />
+                            <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
                         </marker>
                     </defs>
                     {edges.map(({ from, to }) => {
@@ -278,9 +293,9 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
 
                         return (
                             <path
-                                key={`${from}-${to}`}
+                                key={`${from}-${to}-${Math.random()}`}
                                 d={getCurvePath(startX, startY, endX, endY)}
-                                stroke="#4e5058"
+                                stroke="currentColor"
                                 strokeWidth="2"
                                 fill="none"
                                 markerEnd="url(#arrowhead)"
@@ -304,24 +319,28 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
                                 e.stopPropagation();
                                 onDeleteScene(scene.id);
                             }}
+                            t={t}
+                            language={language}
                         />
                     );
                 })}
 
                 {scenes.length === 0 && (
                   <div className="absolute top-1/2 left-1/2 text-center" style={{ transform: `translate(-50%, -50%) scale(${1 / viewTransform.scale})` }}>
-                      <p className="text-text-secondary">No scenes yet.</p>
-                      <Button onClick={handleAddScene} size="sm" className="mt-4">
-                          Create your first scene
+                      <p className="text-muted-foreground">{t('noScenes', language)}</p>
+                      <Button onClick={() => {
+                          // This should be connected to the App's add scene function
+                      }} size="sm" className="mt-4">
+                          {t('createFirstScene', language)}
                       </Button>
                   </div>
                 )}
             </div>
         </div>
          <div className="absolute bottom-3 right-3 flex flex-col gap-2">
-            <button title="Zoom In" onClick={() => handleZoom('in')} className="w-8 h-8 flex items-center justify-center bg-secondary text-text-primary rounded-md hover:bg-tertiary transition-colors shadow-lg"><PlusIcon className="w-5 h-5"/></button>
-            <button title="Zoom Out" onClick={() => handleZoom('out')} className="w-8 h-8 flex items-center justify-center bg-secondary text-text-primary rounded-md hover:bg-tertiary transition-colors shadow-lg"><MinusIcon className="w-5 h-5"/></button>
-            <button title="Reset View" onClick={handleResetView} className="w-8 h-8 flex items-center justify-center bg-secondary text-text-primary rounded-md hover:bg-tertiary transition-colors shadow-lg"><HomeIcon className="w-5 h-5" /></button>
+            <button title={t('zoomIn', language)} onClick={() => handleZoom('in')} className="w-8 h-8 flex items-center justify-center bg-card text-foreground rounded-md hover:bg-secondary transition-colors shadow-lg"><PlusIcon className="w-5 h-5"/></button>
+            <button title={t('zoomOut', language)} onClick={() => handleZoom('out')} className="w-8 h-8 flex items-center justify-center bg-card text-foreground rounded-md hover:bg-secondary transition-colors shadow-lg"><MinusIcon className="w-5 h-5"/></button>
+            <button title={t('resetView', language)} onClick={handleResetView} className="w-8 h-8 flex items-center justify-center bg-card text-foreground rounded-md hover:bg-secondary transition-colors shadow-lg"><HomeIcon className="w-5 h-5" /></button>
         </div>
     </div>
   );

@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -7,24 +6,83 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Visual Novel Scenario Editor</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --background: 255 255 255;
+        --foreground: 15 23 42;
+        --card: 241 245 249;
+        --card-foreground: 15 23 42;
+        --primary: 88 101 242;
+        --primary-hover: 79 91 218;
+        --primary-foreground: 255 255 255;
+        --secondary: 226 232 240;
+        --secondary-hover: 203 213 225;
+        --secondary-foreground: 15 23 42;
+        --muted: 241 245 249;
+        --muted-foreground: 100 116 139;
+        --border: 203 213 225;
+        --ring: 88 101 242;
+        --danger: 239 68 68;
+        --danger-hover: 220 38 38;
+      }
+ 
+      .dark {
+        --background: 30 31 34;
+        --foreground: 242 243 245;
+        --card: 43 45 49;
+        --card-foreground: 242 243 245;
+        --primary: 88 101 242;
+        --primary-hover: 79 91 218;
+        --primary-foreground: 242 243 245;
+        --secondary: 56 58 64;
+        --secondary-hover: 78 80 88;
+        --secondary-foreground: 242 243 245;
+        --muted: 78 80 88;
+        --muted-foreground: 184 185 191;
+        --border: 78 80 88;
+        --ring: 88 101 242;
+        --danger: 185 28 28;
+        --danger-hover: 153 27 27;
+      }
+    </style>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
-              'primary': '#1e1f22',
-              'secondary': '#2b2d31',
-              'tertiary': '#383a40',
-              'accent': '#5865f2',
-              'accent-hover': '#4f5bda',
-              'text-primary': '#f2f3f5',
-              'text-secondary': '#b8b9bf',
-              'border-color': '#4e5058',
+              border: 'rgb(var(--border) / <alpha-value>)',
+              ring: 'rgb(var(--ring) / <alpha-value>)',
+              background: 'rgb(var(--background) / <alpha-value>)',
+              foreground: 'rgb(var(--foreground) / <alpha-value>)',
+              primary: {
+                DEFAULT: 'rgb(var(--primary) / <alpha-value>)',
+                hover: 'rgb(var(--primary-hover) / <alpha-value>)',
+                foreground: 'rgb(var(--primary-foreground) / <alpha-value>)',
+              },
+              secondary: {
+                DEFAULT: 'rgb(var(--secondary) / <alpha-value>)',
+                hover: 'rgb(var(--secondary-hover) / <alpha-value>)',
+                foreground: 'rgb(var(--secondary-foreground) / <alpha-value>)',
+              },
+              card: {
+                DEFAULT: 'rgb(var(--card) / <alpha-value>)',
+                foreground: 'rgb(var(--card-foreground) / <alpha-value>)',
+              },
+              muted: {
+                DEFAULT: 'rgb(var(--muted) / <alpha-value>)',
+                foreground: 'rgb(var(--muted-foreground) / <alpha-value>)',
+              },
+              danger: {
+                DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
+                hover: 'rgb(var(--danger-hover) / <alpha-value>)',
+              }
             },
           },
         },
       }
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
   <script type="importmap">
 {
   "imports": {
@@ -36,7 +94,7 @@
 }
 </script>
 </head>
-  <body class="bg-primary text-text-primary">
+  <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

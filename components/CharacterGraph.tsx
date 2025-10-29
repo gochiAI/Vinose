@@ -4,6 +4,7 @@ import { MinusIcon } from './icons/MinusIcon';
 import { HomeIcon } from './icons/HomeIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { CharacterIcon } from './icons/CharacterIcon';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface CharacterGraphProps {
   characters: Character[];
@@ -17,11 +18,13 @@ const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 2;
 
 
-const CharacterNode = React.memo(({ character, position, isSelected, onClick }: {
+const CharacterNode = React.memo(({ character, position, isSelected, onClick, t, language }: {
     character: Character;
     position: { x: number; y: number };
     isSelected: boolean;
     onClick: () => void;
+    t: (key: any, lang: any) => string;
+    language: 'en' | 'ja';
 }) => (
     <div
       style={{
@@ -31,14 +34,14 @@ const CharacterNode = React.memo(({ character, position, isSelected, onClick }: 
         height: NODE_RADIUS * 2,
       }}
       className={`absolute p-2 rounded-full cursor-pointer transition-all duration-200 flex flex-col justify-center items-center text-center scene-node ${
-        isSelected ? 'bg-tertiary ring-2 ring-accent shadow-lg' : 'bg-secondary hover:bg-tertiary shadow-md'
+        isSelected ? 'bg-secondary ring-2 ring-ring shadow-lg' : 'bg-card hover:bg-secondary shadow-md'
       }`}
       onClick={onClick}
       title={character.name}
     >
-        <CharacterIcon className="w-6 h-6 text-accent mb-1"/>
-        <h3 className="font-bold text-xs text-text-primary truncate w-full">
-            {character.name || 'Unnamed'}
+        <CharacterIcon className="w-6 h-6 text-primary mb-1"/>
+        <h3 className="font-bold text-xs text-foreground truncate w-full">
+            {character.name || t('unnamed', language)}
         </h3>
     </div>
 ));
@@ -48,6 +51,7 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const { t, language } = useSettings();
   
   const { nodePositions, edges, contentSize } = useMemo(() => {
     const positions: { [key: string]: { x: number; y: number } } = {};
@@ -163,7 +167,7 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
     <div className="flex-1 relative">
         <div 
             ref={containerRef}
-            className="w-full h-full bg-primary border-2 border-dashed border-tertiary rounded-lg overflow-hidden relative cursor-grab"
+            className="w-full h-full bg-background border-2 border-dashed border-border rounded-lg overflow-hidden relative cursor-grab"
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -178,6 +182,7 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
                     width={contentSize.width}
                     height={contentSize.height}
                     className="absolute top-0 left-0"
+                    style={{ color: 'var(--border)'}}
                 >
                     <defs>
                         <marker
@@ -189,7 +194,7 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
                             orient="auto"
                             markerUnits="strokeWidth"
                         >
-                            <polygon points="0 0, 10 3.5, 0 7" fill="#4e5058" />
+                            <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
                         </marker>
                     </defs>
                     {edges.map((edge) => {
@@ -208,12 +213,12 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
                             <g key={edge.id}>
                             <path
                                 d={`M ${edge.sourcePos.x} ${edge.sourcePos.y} L ${endX} ${endY}`}
-                                stroke="#4e5058"
+                                stroke="currentColor"
                                 strokeWidth="2"
                                 fill="none"
                                 markerEnd="url(#rel-arrowhead)"
                             />
-                            <text x={midX} y={midY - 5} fill="#b8b9bf" fontSize="12" textAnchor="middle">{edge.type}</text>
+                            <text x={midX} y={midY - 5} fill="var(--muted-foreground)" fontSize="12" textAnchor="middle">{edge.type}</text>
                             </g>
                         );
                     })}
@@ -229,22 +234,24 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
                             position={position}
                             isSelected={char.id === selectedCharacterId}
                             onClick={() => onSelectCharacter(char.id)}
+                            t={t}
+                            language={language}
                         />
                     );
                 })}
 
                 {characters.length === 0 && (
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-text-secondary" style={{ transform: `translate(-50%, -50%) scale(${1 / viewTransform.scale})` }}>
-                     <p>No characters yet.</p>
-                     <p className="text-sm">Add a character in the Project DB panel.</p>
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-muted-foreground" style={{ transform: `translate(-50%, -50%) scale(${1 / viewTransform.scale})` }}>
+                     <p>{t('noCharacters', language)}</p>
+                     <p className="text-sm">{t('addCharacterHint', language)}</p>
                   </div>
                 )}
             </div>
         </div>
          <div className="absolute bottom-3 right-3 flex flex-col gap-2">
-            <button title="Zoom In" onClick={() => handleZoom('in')} className="w-8 h-8 flex items-center justify-center bg-secondary text-text-primary rounded-md hover:bg-tertiary transition-colors shadow-lg"><PlusIcon className="w-5 h-5"/></button>
-            <button title="Zoom Out" onClick={() => handleZoom('out')} className="w-8 h-8 flex items-center justify-center bg-secondary text-text-primary rounded-md hover:bg-tertiary transition-colors shadow-lg"><MinusIcon className="w-5 h-5"/></button>
-            <button title="Reset View" onClick={handleResetView} className="w-8 h-8 flex items-center justify-center bg-secondary text-text-primary rounded-md hover:bg-tertiary transition-colors shadow-lg"><HomeIcon className="w-5 h-5" /></button>
+            <button title={t('zoomIn', language)} onClick={() => handleZoom('in')} className="w-8 h-8 flex items-center justify-center bg-card text-foreground rounded-md hover:bg-secondary transition-colors shadow-lg"><PlusIcon className="w-5 h-5"/></button>
+            <button title={t('zoomOut', language)} onClick={() => handleZoom('out')} className="w-8 h-8 flex items-center justify-center bg-card text-foreground rounded-md hover:bg-secondary transition-colors shadow-lg"><MinusIcon className="w-5 h-5"/></button>
+            <button title={t('resetView', language)} onClick={handleResetView} className="w-8 h-8 flex items-center justify-center bg-card text-foreground rounded-md hover:bg-secondary transition-colors shadow-lg"><HomeIcon className="w-5 h-5" /></button>
         </div>
     </div>
   );
