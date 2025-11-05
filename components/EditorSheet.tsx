@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { EditableItem, ProjectData, DbItemType, SceneEvent, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, ChoiceEvent, Choice, Relationship, Scene, GoToSceneEvent, Memo, Task, Character, Location, Item, Asset, AssetType, Plot, CustomProperty } from '../types';
+import { EditableItem, ProjectData, DbItemType, SceneEvent, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, ChoiceEvent, Choice, Relationship, Scene, GoToSceneEvent, Memo, Task, Character, Location, Item, Asset, AssetType, Plot, CustomProperty, SfxEvent } from '../types';
 import { Input } from './ui/Input';
 import { Textarea } from './ui/Textarea';
 import { Button } from './ui/Button';
@@ -16,6 +16,7 @@ import { ImageIcon } from './icons/ImageIcon';
 import { ChoiceIcon } from './icons/ChoiceIcon';
 import { GotoSceneIcon } from './icons/GotoSceneIcon';
 import { CharacterIcon } from './icons/CharacterIcon';
+import { SfxIcon } from './icons/SfxIcon';
 
 declare const marked: any;
 declare const DOMPurify: any;
@@ -145,7 +146,7 @@ interface EditorSheetProps {
   onUpdate: (item: EditableItem) => void;
   onClose: () => void;
   onDeleteItem: (type: DbItemType, id: string) => void;
-  onAddEvent: (sceneId: string, type: EventType) => void;
+  onAddEvent: (sceneId: string, type: EventType, index?: number) => void;
   onAddEvents: (sceneId: string, events: SceneEvent[]) => void;
   onUpdateEvent: (sceneId: string, event: SceneEvent) => void;
   onDeleteEvent: (sceneId: string, eventId: string) => void;
@@ -231,8 +232,15 @@ const CharacterRelationshipEditor: React.FC<{
     );
 }
 
+// FIX: Changed the 'item' prop to be a discriminated union for proper type narrowing.
 const DbItemEditor: React.FC<{
-    item: { type: 'character' | 'location' | 'item' | 'memo' | 'task' | 'plot', data: Character | Location | Item | Memo | Task | Plot };
+    item:
+      | { type: 'character'; data: Character }
+      | { type: 'location'; data: Location }
+      | { type: 'item'; data: Item }
+      | { type: 'memo'; data: Memo }
+      | { type: 'task'; data: Task }
+      | { type: 'plot'; data: Plot };
     projectData: ProjectData;
     onUpdate: (item: EditableItem) => void;
     onDeleteItem: (type: DbItemType, id: string) => void;
@@ -247,9 +255,9 @@ const DbItemEditor: React.FC<{
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiResult, setAiResult] = useState('');
 
-    const hasTitle = 'title' in item.data;
-    const title = hasTitle ? item.data.title : (item.data as Character).name;
-    const itemData = item.data;
+    // FIX: Use discriminated union `item.type` for type-safe property access.
+    const hasTitle = item.type === 'memo' || item.type === 'task' || item.type === 'plot';
+    const title = hasTitle ? item.data.title : item.data.name;
 
     const handleDelete = () => {
         if(window.confirm(t('confirmDelete', language).replace('{name}', title))){
@@ -258,21 +266,24 @@ const DbItemEditor: React.FC<{
         }
     };
     
-    const hasContent = 'content' in itemData;
-    const content = hasContent ? (itemData as Memo | Plot).content : (itemData as Character | Location | Item | Task).description;
+    // FIX: Use discriminated union `item.type` for type-safe property access.
+    const hasContent = item.type === 'memo' || item.type === 'plot';
+    const content = hasContent ? item.data.content : item.data.description;
     const label = hasContent ? t('content', language) : t('description', language);
 
+    // FIX: Use discriminated union `item.type` for type-safe updates.
     const handleContentChange = (value: string) => {
-        if (hasContent) {
-            onUpdate({ ...item, data: { ...(itemData as Memo | Plot), content: value } });
-        } else {
-            onUpdate({ ...item, data: { ...(itemData as Character | Location | Item | Task), description: value } });
+        if (item.type === 'memo' || item.type === 'plot') {
+            onUpdate({ ...item, data: { ...item.data, content: value } });
+        } else { // 'character', 'location', 'item', 'task'
+            onUpdate({ ...item, data: { ...item.data, description: value } });
         }
     };
     
     const handleGenerateDescription = async () => {
         setAiResult('');
-        const char = itemData as Character;
+        if (item.type !== 'character') return;
+        const char = item.data;
         const systemPrompt = `You are a creative assistant for a visual novel writer.
 Based on the character's name, current description, and the user's request, generate a new, richer description for the character.
 Output only the description text itself, without any introductory phrases.
@@ -295,20 +306,19 @@ User Request: ${aiPrompt}
         setAiPrompt('');
     };
 
-    const canHaveProperties = item.type !== 'task';
-
     return (
         <div className="flex h-full p-4 space-x-4">
             <div className="flex-1 space-y-4">
                 <Input
                     label={hasTitle ? t('title', language) : t('name', language)}
                     value={title}
+                    // FIX: Use discriminated union `item.type` for type-safe updates.
                     onChange={(e) => {
                         const newValue = e.target.value;
-                        if (hasTitle) {
-                            onUpdate({ ...item, data: { ...itemData, title: newValue } });
+                        if (item.type === 'memo' || item.type === 'plot' || item.type === 'task') {
+                            onUpdate({ ...item, data: { ...item.data, title: newValue } });
                         } else {
-                            onUpdate({ ...item, data: { ...(itemData as Character), name: newValue } });
+                            onUpdate({ ...item, data: { ...item.data, name: newValue } });
                         }
                     }}
                 />
@@ -356,13 +366,14 @@ User Request: ${aiPrompt}
                     )}
                 </div>
                
+                {/* FIX: Use discriminated union `item.type` for type-safe access and updates. */}
                 {item.type === 'task' && (
                     <div className="pt-2">
                         <Checkbox
                             id="task-completed"
                             label={t('completed', language)}
-                            checked={(itemData as Task).completed}
-                            onChange={(e) => onUpdate({ ...item, data: { ...(itemData as Task), completed: e.target.checked }})}
+                            checked={item.data.completed}
+                            onChange={(e) => onUpdate({ ...item, data: { ...item.data, completed: e.target.checked }})}
                         />
                     </div>
                 )}
@@ -376,17 +387,18 @@ User Request: ${aiPrompt}
             <div className="flex-1 overflow-y-auto border-l border-border pl-4 space-y-4">
                 {item.type === 'character' && (
                     <CharacterRelationshipEditor 
-                        character={itemData as Character}
+                        character={item.data}
                         projectData={projectData}
                         onAddRelationship={onAddRelationship}
                         onDeleteRelationship={onDeleteRelationship}
                     />
                 )}
-                {canHaveProperties && (
+                {/* FIX: Use discriminated union `item.type` for type-safe property access and updates. */}
+                {item.type !== 'task' && (
                     <CustomPropertiesEditor 
-                        properties={itemData.properties || []}
+                        properties={item.data.properties || []}
                         onUpdateProperties={(newProps) => {
-                            onUpdate({ ...item, data: { ...itemData, properties: newProps } });
+                            onUpdate({ ...item, data: { ...item.data, properties: newProps } });
                         }}
                     />
                 )}
@@ -409,16 +421,24 @@ User Request: ${aiPrompt}
     );
 }
 
+// FIX: Changed the 'item' prop to be a discriminated union for proper type narrowing.
 const DbItemViewer: React.FC<{
-    item: { type: 'character' | 'location' | 'item' | 'memo' | 'task' | 'plot', data: Character | Location | Item | Memo | Task | Plot };
+    item:
+      | { type: 'character'; data: Character }
+      | { type: 'location'; data: Location }
+      | { type: 'item'; data: Item }
+      | { type: 'memo'; data: Memo }
+      | { type: 'task'; data: Task }
+      | { type: 'plot'; data: Plot };
     projectData: ProjectData;
 }> = ({ item, projectData }) => {
     const { t, language } = useSettings();
 
-    const hasTitle = 'title' in item.data;
-    const title = hasTitle ? item.data.title : (item.data as Character).name;
-    const hasContent = 'content' in item.data;
-    const content = hasContent ? (item.data as Memo | Plot).content : (item.data as Character | Location | Item | Task).description;
+    // FIX: Use discriminated union `item.type` for type-safe property access.
+    const hasTitle = item.type === 'memo' || item.type === 'task' || item.type === 'plot';
+    const title = hasTitle ? item.data.title : item.data.name;
+    const hasContent = item.type === 'memo' || item.type === 'plot';
+    const content = hasContent ? item.data.content : item.data.description;
     const label = hasContent ? t('content', language) : t('description', language);
 
     return (
@@ -430,7 +450,7 @@ const DbItemViewer: React.FC<{
                 {item.type === 'task' && (
                     <p className="text-sm">
                         <span className="font-semibold text-muted-foreground">{t('status', language)}: </span>
-                        {(item.data as Task).completed ? t('completedStatus', language) : t('incomplete', language)}
+                        {item.data.completed ? t('completedStatus', language) : t('incomplete', language)}
                     </p>
                 )}
 
@@ -439,13 +459,14 @@ const DbItemViewer: React.FC<{
                     className="prose prose-sm max-w-none w-full text-foreground -mt-2"
                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(content || `*${t('noContentPreview', language)}*`)) }}
                 />
+                 {/* FIX: Use discriminated union `item.type` for type-safe property access. */}
                  {item.type !== 'task' && <CustomPropertiesViewer properties={item.data.properties} />}
             </div>
 
             {item.type === 'character' && (
                 <div className="w-1/3 overflow-y-auto border-l border-border pl-6">
                     <CharacterRelationshipEditor 
-                        character={item.data as Character}
+                        character={item.data}
                         projectData={projectData}
                         isReadOnly={true}
                         onAddRelationship={() => {}}
@@ -466,12 +487,37 @@ const AssetEditor: React.FC<{
 }> = ({ item, onUpdate, onDeleteItem, onClose }) => {
     const { t, language } = useSettings();
     const asset = item.data;
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleDelete = () => {
         if(window.confirm(t('confirmDelete', language).replace('{name}', asset.name))){
             onDeleteItem(item.type, asset.id);
             onClose();
         }
+    };
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+    
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+    
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target?.result as string;
+            onUpdate({ 
+                ...item, 
+                data: { 
+                    ...asset, 
+                    data: dataUrl, 
+                    mimeType: file.type,
+                } 
+            });
+        };
+        reader.readAsDataURL(file);
+        event.target.value = ''; // Reset file input
     };
 
     return (
@@ -496,12 +542,28 @@ const AssetEditor: React.FC<{
              <div>
                 <label className="block text-sm font-medium text-muted-foreground mb-1">{t('assetPreview', language)}</label>
                 <div className="w-full p-2 bg-background border border-border rounded-md min-h-[100px] flex items-center justify-center">
-                    {asset.mimeType.startsWith('image/') ? (
-                        <img src={asset.data} alt={asset.name} className="max-w-full max-h-64 object-contain" />
-                    ) : asset.mimeType.startsWith('audio/') ? (
-                        <audio controls src={asset.data} />
+                    {asset.data ? (
+                      asset.mimeType.startsWith('image/') ? (
+                          <img src={asset.data} alt={asset.name} className="max-w-full max-h-64 object-contain" />
+                      ) : asset.mimeType.startsWith('audio/') ? (
+                          <audio controls src={asset.data} />
+                      ) : (
+                          <p className="text-sm text-muted-foreground">{t('noPreview', language)}</p>
+                      )
                     ) : (
-                        <p className="text-sm text-muted-foreground">{t('noPreview', language)}</p>
+                        <div className="text-center p-4">
+                            <p className="text-sm text-muted-foreground">{t('noFileUploaded', language)}</p>
+                            <Button variant="secondary" size="sm" className="mt-2" onClick={handleUploadClick}>
+                                {t('uploadFile', language)}...
+                            </Button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileChange}
+                                className="hidden"
+                                accept={asset.type === AssetType.SFX ? 'audio/*' : 'image/*'}
+                            />
+                        </div>
                     )}
                 </div>
             </div>
@@ -530,12 +592,16 @@ const AssetViewer: React.FC<{
 
             <h3 className="text-sm font-semibold text-muted-foreground">{t('assetPreview', language)}</h3>
             <div className="w-full p-2 bg-background border border-border rounded-md min-h-[100px] flex items-center justify-center">
-                {asset.mimeType.startsWith('image/') ? (
-                    <img src={asset.data} alt={asset.name} className="max-w-full max-h-64 object-contain" />
-                ) : asset.mimeType.startsWith('audio/') ? (
-                    <audio controls src={asset.data} className="w-full" />
+                {asset.data ? (
+                    asset.mimeType.startsWith('image/') ? (
+                        <img src={asset.data} alt={asset.name} className="max-w-full max-h-64 object-contain" />
+                    ) : asset.mimeType.startsWith('audio/') ? (
+                        <audio controls src={asset.data} className="w-full" />
+                    ) : (
+                        <p className="text-sm text-muted-foreground">{t('noPreview', language)}</p>
+                    )
                 ) : (
-                    <p className="text-sm text-muted-foreground">{t('noPreview', language)}</p>
+                    <p className="text-sm text-muted-foreground">{t('noFileUploaded', language)}</p>
                 )}
             </div>
         </div>
@@ -572,11 +638,56 @@ const AssetSelector: React.FC<{
     );
 }
 
+const AddEventControl: React.FC<{
+    index: number;
+    sceneId: string;
+    onAddEvent: (sceneId: string, type: EventType, index?: number) => void;
+}> = ({ index, sceneId, onAddEvent }) => {
+    const [isAdding, setIsAdding] = useState(false);
+    const { t, language } = useSettings();
+
+    const handleAdd = (type: EventType) => {
+        onAddEvent(sceneId, type, index);
+        setIsAdding(false);
+    };
+
+    if (isAdding) {
+        return (
+            <div className="p-2 bg-secondary rounded-md my-2 animate-fade-in-fast">
+                <div className="grid grid-cols-3 gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => handleAdd(EventType.DIALOGUE)}>{t('dialogue', language)}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleAdd(EventType.ACTION)}>{t('action', language)}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleAdd(EventType.BACKGROUND_CHANGE)}>{t('bgChange', language)}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleAdd(EventType.CHOICE)}>{t('choice', language)}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleAdd(EventType.GOTO_SCENE)}>{t('goToScene', language)}</Button>
+                    <Button variant="secondary" size="sm" onClick={() => handleAdd(EventType.SFX)}>{t('sfx', language)}</Button>
+                </div>
+                <button onClick={() => setIsAdding(false)} className="text-xs text-muted-foreground hover:text-foreground mt-2 w-full">{t('cancel', language)}</button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="relative h-3 group my-1 flex items-center">
+            <hr className="w-full border-t border-border group-hover:border-ring transition-colors" />
+            <button
+                onClick={() => setIsAdding(true)}
+                title={t('addEventHere', language)}
+                className="absolute left-1/2 -translate-x-1/2 bg-card px-2 py-0.5 rounded-full border border-border text-xs text-muted-foreground hover:border-ring hover:text-ring transition-all group-hover:scale-110 flex items-center gap-1"
+            >
+                <PlusIcon className="w-3 h-3" />
+                {t('addEvent', language)}
+            </button>
+        </div>
+    );
+};
+
+
 const SceneEditor: React.FC<{
     item: { type: 'scene', data: Scene };
     projectData: ProjectData;
     onUpdate: (item: EditableItem) => void;
-    onAddEvent: (sceneId: string, type: EventType) => void;
+    onAddEvent: (sceneId: string, type: EventType, index?: number) => void;
     onAddEvents: (sceneId: string, events: SceneEvent[]) => void;
     onUpdateEvent: (sceneId: string, event: SceneEvent) => void;
     onDeleteEvent: (sceneId: string, eventId: string) => void;
@@ -584,7 +695,6 @@ const SceneEditor: React.FC<{
 }> = ({ item, projectData, onUpdate, onAddEvent, onAddEvents, onUpdateEvent, onDeleteEvent, onAddScene }) => {
     const scene = item.data;
     const { t, language } = useSettings();
-    const [addMode, setAddMode] = useState<'buttons' | 'command'>('buttons');
     const [commandInput, setCommandInput] = useState('');
     const { generateContent, isLoading, isAvailable } = useGemini();
     const [isAiOpen, setIsAiOpen] = useState(false);
@@ -626,22 +736,26 @@ const SceneEditor: React.FC<{
         const lineUpToCursor = currentLine.substring(0, cursorIndexOnLine);
         const parts = lineUpToCursor.trim().split(/\s+/);
         const command = parts[0];
-    
-        if (command.startsWith('/')) {
+
+        if (command === '' && textBeforeCursorOnLine.trim() === '') {
+            newSuggestions = ['/dialogue', '/action', '/bg', '/sfx', '/choice', '/goto'];
+        } else if (command.startsWith('/')) {
             if (parts.length === 1 && !lineUpToCursor.includes(' ')) {
-                 newSuggestions = ['dialogue', 'action', 'bg', 'choice', 'goto'].filter(c => c.startsWith(command.substring(1)));
-            } else if (command === '/dialogue' && parts.length >= 2) {
+                 newSuggestions = ['dialogue', 'action', 'bg', 'choice', 'goto', 'sfx'].filter(c => c.startsWith(command.substring(1)));
+            } else if (command === '/dialogue' && (parts.length >= 2 || lineUpToCursor.endsWith(' '))) {
                  newSuggestions = projectData.characters.filter(c => c.name.toLowerCase().includes(token.toLowerCase())).map(c => c.name);
-            } else if (command === '/bg' && parts.length >= 2) {
+            } else if (command === '/bg' && (parts.length >= 2 || lineUpToCursor.endsWith(' '))) {
                  newSuggestions = projectData.assets.filter(a => a.type === AssetType.BACKGROUND && a.name.toLowerCase().includes(token.toLowerCase())).map(a => a.name);
-            } else if (command === '/goto' && parts.length >= 2) {
+            } else if (command === '/sfx' && (parts.length >= 2 || lineUpToCursor.endsWith(' '))) {
+                 newSuggestions = projectData.assets.filter(a => a.type === AssetType.SFX && a.name.toLowerCase().includes(token.toLowerCase())).map(a => a.name);
+            } else if (command === '/goto' && (parts.length >= 2 || lineUpToCursor.endsWith(' '))) {
                  newSuggestions = projectData.scenes.filter(s => s.title.toLowerCase().includes(token.toLowerCase())).map(s => s.title);
             }
         } else if (lineUpToCursor.includes('->')) {
             newSuggestions = projectData.scenes.filter(s => s.title.toLowerCase().includes(token.toLowerCase())).map(s => s.title);
         }
     
-        if (newSuggestions.length > 0 && token.length > 0) {
+        if (newSuggestions.length > 0) {
             setSuggestions(newSuggestions);
             setCompletionToken(token);
             setShowSuggestions(true);
@@ -699,38 +813,44 @@ const SceneEditor: React.FC<{
         const lines = textToParse.split('\n');
         const newEvents: SceneEvent[] = [];
         let currentCommand: { type: string, params: string[], content: string[] } | null = null;
-
+    
+        const findByName = (collection: {id: string, name: string}[], name: string) => {
+            if (!name) return undefined;
+            const trimmedName = name.trim();
+            const lname = trimmedName.toLowerCase();
+            return collection.find(item => item.name.trim() === trimmedName) || collection.find(item => item.name.toLowerCase().trim() === lname);
+        };
+        const findSceneByName = (collection: {id: string, title: string}[], name: string) => {
+            if (!name) return undefined;
+            const trimmedName = name.trim();
+            const lname = trimmedName.toLowerCase();
+            return collection.find(item => item.title.trim() === trimmedName) || collection.find(item => item.title.toLowerCase().trim() === lname);
+        };
+    
         const processCurrentCommand = () => {
             if (!currentCommand) return;
             
-            const findByName = (collection: {id: string, name: string}[], name: string) => {
-                if (!name) return undefined;
-                const lname = name.toLowerCase().trim();
-                return collection.find(item => item.name.toLowerCase().trim() === lname);
-            };
-            const findSceneByName = (collection: {id: string, title: string}[], name: string) => {
-                if (!name) return undefined;
-                const lname = name.toLowerCase().trim();
-                return collection.find(item => item.title.toLowerCase().trim() === lname);
-            };
-
             switch(currentCommand.type) {
                 case 'dialogue': {
                     const charName = currentCommand.params.join(' ');
                     const character = findByName(projectData.characters, charName);
+                    const text = currentCommand.content.join('\n').trim();
+                    if (!charName && !text) break; 
                     newEvents.push({
                         id: `event-${Date.now()}-${newEvents.length}`,
                         type: EventType.DIALOGUE,
                         characterId: character ? character.id : projectData.characters[0]?.id || '',
-                        text: character ? currentCommand.content.join('\n').trim() : `[Character "${charName}" not found]\n${currentCommand.content.join('\n').trim()}`,
+                        text: character ? text : `[Character "${charName}" not found]\n${text}`,
                     });
                     break;
                 }
                 case 'action': {
+                    const description = currentCommand.content.join('\n').trim();
+                    if(!description) break;
                     newEvents.push({
                         id: `event-${Date.now()}-${newEvents.length}`,
                         type: EventType.ACTION,
-                        description: currentCommand.content.join('\n').trim(),
+                        description,
                     });
                     break;
                 }
@@ -741,6 +861,16 @@ const SceneEditor: React.FC<{
                         id: `event-${Date.now()}-${newEvents.length}`,
                         type: EventType.BACKGROUND_CHANGE,
                         backgroundAssetId: asset ? asset.id : '',
+                    });
+                    break;
+                }
+                case 'sfx': {
+                    const assetName = currentCommand.params.join(' ');
+                    const asset = findByName(projectData.assets.filter(a => a.type === AssetType.SFX), assetName);
+                    newEvents.push({
+                        id: `event-${Date.now()}-${newEvents.length}`,
+                        type: EventType.SFX,
+                        sfxAssetId: asset ? asset.id : '',
                     });
                     break;
                 }
@@ -788,20 +918,111 @@ const SceneEditor: React.FC<{
                 }
             }
         };
-
+    
         for (const line of lines) {
-            if (line.trim().startsWith('/')) {
+            const trimmedLine = line.trim();
+    
+            if (trimmedLine.startsWith('/')) {
                 processCurrentCommand();
-                const parts = line.trim().substring(1).split(/\s+/);
-                const type = parts[0].toLowerCase();
-                const params = parts.slice(1);
-                currentCommand = { type, params, content: [] };
-            } else if (currentCommand) {
+                const commandLine = trimmedLine.substring(1).trim();
+
+                let type: string;
+                let rest: string;
+
+                const firstSpaceIndex = commandLine.indexOf(' ');
+                const firstColonIndex = commandLine.indexOf(':');
+
+                let separatorIndex = -1;
+                if (firstSpaceIndex > -1 && firstColonIndex > -1) separatorIndex = Math.min(firstSpaceIndex, firstColonIndex);
+                else if (firstSpaceIndex > -1) separatorIndex = firstSpaceIndex;
+                else if (firstColonIndex > -1) separatorIndex = firstColonIndex;
+
+                if (separatorIndex === -1) {
+                    type = commandLine.toLowerCase();
+                    rest = '';
+                } else {
+                    type = commandLine.substring(0, separatorIndex).toLowerCase();
+                    rest = commandLine.substring(separatorIndex + 1).trim();
+                }
+
+                let params: string[] = [];
+                let content: string[] = [];
+
+                if (type === 'action') {
+                    if (rest) content.push(rest);
+                } else if (type === 'dialogue') {
+                    let matchedChar: Character | undefined;
+                    let remainingText = rest;
+
+                    const sortedCharacters = [...projectData.characters].sort((a, b) => b.name.length - a.name.length);
+
+                    for (const char of sortedCharacters) {
+                        const trimmedCharName = char.name.trim();
+                        if (rest.toLowerCase().startsWith(trimmedCharName.toLowerCase())) {
+                            const afterName = rest.substring(trimmedCharName.length).trim();
+                            if (afterName.startsWith(':') || afterName === '') {
+                                matchedChar = char;
+                                remainingText = afterName.startsWith(':') ? afterName.substring(1).trim() : '';
+                                break;
+                            }
+                        }
+                    }
+
+                    if (matchedChar) {
+                        params.push(matchedChar.name);
+                        if (remainingText) content.push(remainingText);
+                    } else {
+                        const colonIndex = rest.indexOf(':');
+                        if (colonIndex > -1) {
+                            params.push(rest.substring(0, colonIndex).trim());
+                            content.push(rest.substring(colonIndex + 1).trim());
+                        } else {
+                            params.push(rest);
+                        }
+                    }
+                } else if (type === 'choice') {
+                    // No params or content on the command line itself
+                }
+                else { // bg, sfx, goto
+                    params = rest.split(/\s+/).filter(p => p);
+                }
+
+                currentCommand = { type, params, content };
+                
+                if (content.length > 0 || (params.length > 0 && ['bg', 'sfx', 'goto'].includes(type))) {
+                    processCurrentCommand();
+                    currentCommand = null;
+                }
+                
+                continue;
+            }
+
+            const dialogueMatch = trimmedLine.match(/^([^:]+):\s*(.*)$/);
+            const potentialName = dialogueMatch ? dialogueMatch[1].trim() : '';
+            const character = potentialName ? findByName(projectData.characters, potentialName) : null;
+            
+            if (dialogueMatch && character) {
+                processCurrentCommand();
+                const dialogueText = dialogueMatch[2].trim();
+                currentCommand = {
+                    type: 'dialogue',
+                    params: [character.name],
+                    content: []
+                };
+                if (dialogueText) {
+                    currentCommand.content.push(dialogueText);
+                    processCurrentCommand();
+                    currentCommand = null;
+                }
+                continue;
+            }
+    
+            if (currentCommand) {
                 currentCommand.content.push(line);
             }
         }
         processCurrentCommand();
-
+    
         if (newEvents.length > 0) {
             onAddEvents(scene.id, newEvents);
         }
@@ -816,21 +1037,24 @@ const SceneEditor: React.FC<{
         setAiResult('');
         const characterNames = projectData.characters.map(c => c.name).join(', ');
         const backgroundNames = projectData.assets.filter(a => a.type === AssetType.BACKGROUND).map(a => a.name).join(', ');
+        const sfxNames = projectData.assets.filter(a => a.type === AssetType.SFX).map(a => a.name).join(', ');
         const sceneTitles = projectData.scenes.map(s => s.title).join(', ');
     
         const systemPrompt = `You are an assistant for a visual novel writer.
 Convert the user's natural language description into a sequence of commands for the game engine.
 You MUST format the output strictly using these commands, and nothing else. Do not add any explanation or intro/outro text.
-- /dialogue [Character Name]: The character says the following lines.
-- /action: A line describing narration or action.
-- /bg [Background Asset Name]: Changes the background.
-- /goto [Scene Title]: Jumps to another scene.
-- /choice: Presents choices to the player.
-  - [Choice Text] -> [Scene Title]: A choice that leads to another scene.
+- /dialogue [Character Name] or [Character Name]: [Dialogue text]
+- /action: [A line describing narration or action]
+- /bg [Background Asset Name]
+- /sfx [Sound Effect Name]
+- /goto [Scene Title]
+- /choice:
+  - [Choice Text] -> [Scene Title]
 
 Here is the context of the current project:
 - Available Characters: ${characterNames || 'None'}
 - Available Backgrounds: ${backgroundNames || 'None'}
+- Available Sound Effects: ${sfxNames || 'None'}
 - Available Scenes for GOTO: ${sceneTitles || 'None'}
 
 User's description: "${aiPrompt}"
@@ -845,7 +1069,6 @@ Convert the description into commands now:
 
     const handleInsertSceneEvents = (text: string) => {
         setCommandInput(prev => prev ? `${prev}\n${text}` : text);
-        setAddMode('command');
         setIsAiOpen(false);
         setAiResult('');
         setAiPrompt('');
@@ -955,6 +1178,18 @@ Convert the description into commands now:
                     </div>
                 );
             }
+            case EventType.SFX: {
+                const sfxEvent = event as SfxEvent;
+                return (
+                    <AssetSelector
+                        assetType={AssetType.SFX}
+                        label={t('soundEffect', language)}
+                        selectedValue={sfxEvent.sfxAssetId}
+                        onValueChange={(value) => handleEventChange({ ...sfxEvent, sfxAssetId: value })}
+                        projectData={projectData}
+                    />
+                );
+            }
             case EventType.CHOICE: {
                 const choiceEvent = event as ChoiceEvent;
                 const handleUpdateChoice = (choiceIndex: number, updatedChoice: Partial<Choice>) => {
@@ -1034,101 +1269,80 @@ Convert the description into commands now:
     }
 
     return (
-        <div className="flex h-full p-4 space-x-4">
-            <div className="flex-1 space-y-4">
-                 <Input
-                    label={t('sceneTitle', language)}
-                    value={scene.title}
-                    onChange={(e) => onUpdate({ ...item, data: { ...scene, title: e.target.value } })}
-                />
-                <div className="pt-4 border-t border-border">
-                    <div className="flex justify-between items-center mb-2">
-                        <p className="text-sm font-medium text-muted-foreground">{t('addNewEvent', language)}:</p>
-                        <div className="flex bg-secondary p-0.5 rounded-md text-xs">
-                            <button
-                                onClick={() => setAddMode('buttons')}
-                                className={`px-2 py-0.5 rounded-sm transition-colors ${addMode === 'buttons' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary-hover'}`}
-                            >
-                                {t('buttons', language)}
-                            </button>
-                            <button
-                                onClick={() => setAddMode('command')}
-                                className={`px-2 py-0.5 rounded-sm transition-colors ${addMode === 'command' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary-hover'}`}
-                            >
-                                {t('command', language)}
-                            </button>
+        <div className="flex flex-col h-full">
+            <div className="flex-1 flex p-4 space-x-4 overflow-hidden">
+                <div className="flex-1 space-y-4 flex flex-col">
+                    <Input
+                        label={t('sceneTitle', language)}
+                        value={scene.title}
+                        onChange={(e) => onUpdate({ ...item, data: { ...scene, title: e.target.value } })}
+                    />
+                    <div className="flex-1 pt-4 border-t border-border overflow-y-auto pr-2 -mr-2">
+                        <div className="space-y-1">
+                            <AddEventControl index={0} sceneId={scene.id} onAddEvent={onAddEvent} />
+                            {scene.events.map((event, index) => (
+                                <React.Fragment key={event.id}>
+                                    <div className="bg-background p-3 rounded-md border border-border">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-xs font-bold uppercase text-muted-foreground">{event.type}</span>
+                                            <button onClick={() => onDeleteEvent(scene.id, event.id)} className="text-muted-foreground hover:text-danger" title={t('deleteEvent', language)}><TrashIcon className="w-4 h-4" /></button>
+                                        </div>
+                                        {renderEventEditor(event)}
+                                    </div>
+                                    <AddEventControl index={index + 1} sceneId={scene.id} onAddEvent={onAddEvent} />
+                                </React.Fragment>
+                            ))}
                         </div>
-                    </div>
-                    {addMode === 'buttons' ? (
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button variant="secondary" size="sm" onClick={() => onAddEvent(scene.id, EventType.DIALOGUE)}>{t('dialogue', language)}</Button>
-                            <Button variant="secondary" size="sm" onClick={() => onAddEvent(scene.id, EventType.ACTION)}>{t('action', language)}</Button>
-                            <Button variant="secondary" size="sm" onClick={() => onAddEvent(scene.id, EventType.BACKGROUND_CHANGE)}>{t('bgChange', language)}</Button>
-                            <Button variant="secondary" size="sm" onClick={() => onAddEvent(scene.id, EventType.CHOICE)}>{t('choice', language)}</Button>
-                            <Button variant="secondary" size="sm" onClick={() => onAddEvent(scene.id, EventType.GOTO_SCENE)}>{t('goToScene', language)}</Button>
-                        </div>
-                    ) : (
-                         <div className="space-y-2 relative">
-                            <Textarea 
-                                ref={commandTextareaRef}
-                                value={commandInput}
-                                onChange={handleCommandChange}
-                                onKeyDown={handleCommandKeyDown}
-                                onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                                onFocus={(e) => updateSuggestions(e.target.value, e.target.selectionStart)}
-                                rows={8}
-                                placeholder={t('commandModePlaceholder', language)}
-                                className="font-mono text-sm"
-                            />
-                            {showSuggestions && suggestions.length > 0 && (
-                                <div className="absolute z-10 w-[calc(100%-2px)] bg-card border border-border rounded-md shadow-lg max-h-48 overflow-y-auto mt-1 top-full">
-                                    <ul className="py-1">
-                                        {suggestions.map((s, index) => (
-                                            <li
-                                                key={index}
-                                                className={`px-3 py-1.5 cursor-pointer text-sm ${index === activeSuggestionIndex ? 'bg-secondary text-secondary-foreground' : 'hover:bg-secondary'}`}
-                                                onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s); }}
-                                                onMouseEnter={() => setActiveSuggestionIndex(index)}
-                                            >
-                                                {s}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-                            <Button onClick={handleCommandParseAndAdd} className="w-full">
-                                {t('addFromText', language)}
-                            </Button>
-                        </div>
-                    )}
-                </div>
-            </div>
-            <div className="flex-1 overflow-y-auto border-l border-border pl-4">
-                 <div className="flex items-center gap-2 mb-2">
-                    <h4 className="text-md font-semibold text-muted-foreground">{t('events', language)}</h4>
-                     <button
-                        onClick={() => setIsAiOpen(true)}
-                        className="text-primary hover:text-primary-hover"
-                        title={t('aiAssistant', language)}
-                    >
-                        <SparklesIcon className="w-4 h-4" />
-                    </button>
-                </div>
-                <div className="space-y-3">
-                    {scene.events.map((event: SceneEvent) => (
-                        <div key={event.id} className="bg-background p-3 rounded-md border border-border">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-xs font-bold uppercase text-muted-foreground">{event.type}</span>
-                                <button onClick={() => onDeleteEvent(scene.id, event.id)} className="text-muted-foreground hover:text-danger" title={t('deleteEvent', language)}><TrashIcon className="w-4 h-4" /></button>
+                        {scene.events.length === 0 && (
+                            <div className="text-center py-6 text-sm text-muted-foreground">
+                                {t('noEvents', language)}
                             </div>
-                            {renderEventEditor(event)}
-                        </div>
-                    ))}
-                    {scene.events.length === 0 && (
-                        <div className="text-center py-6 text-sm text-muted-foreground">
-                            {t('noEvents', language)}
-                        </div>
-                    )}
+                        )}
+                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto border-l border-border pl-4">
+                    <div className="flex items-center gap-2 mb-2">
+                        <h4 className="text-md font-semibold text-muted-foreground">{t('commandMode', language)}</h4>
+                        <button
+                            onClick={() => setIsAiOpen(true)}
+                            className="text-primary hover:text-primary-hover"
+                            title={t('aiAssistant', language)}
+                        >
+                            <SparklesIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="space-y-2 relative">
+                        <Textarea 
+                            ref={commandTextareaRef}
+                            value={commandInput}
+                            onChange={handleCommandChange}
+                            onKeyDown={handleCommandKeyDown}
+                            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                            onFocus={(e) => updateSuggestions(e.target.value, e.target.selectionStart)}
+                            rows={8}
+                            placeholder={t('commandModePlaceholder', language)}
+                            className="font-mono text-sm"
+                        />
+                        {showSuggestions && suggestions.length > 0 && (
+                            <div className="absolute z-10 w-[calc(100%-2px)] bg-card border border-border rounded-md shadow-lg max-h-48 overflow-y-auto mt-1 top-full">
+                                <ul className="py-1">
+                                    {suggestions.map((s, index) => (
+                                        <li
+                                            key={index}
+                                            className={`px-3 py-1.5 cursor-pointer text-sm ${index === activeSuggestionIndex ? 'bg-secondary text-secondary-foreground' : 'hover:bg-secondary'}`}
+                                            onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s); }}
+                                            onMouseEnter={() => setActiveSuggestionIndex(index)}
+                                        >
+                                            {s}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                        <Button onClick={handleCommandParseAndAdd} className="w-full">
+                            {t('addFromText', language)}
+                        </Button>
+                    </div>
                 </div>
             </div>
             <AiAssistantModal
@@ -1163,6 +1377,7 @@ const SceneViewer: React.FC<{
             case EventType.BACKGROUND_CHANGE: return <ImageIcon className="w-5 h-5 text-primary" />;
             case EventType.CHOICE: return <ChoiceIcon className="w-5 h-5 text-primary" />;
             case EventType.GOTO_SCENE: return <GotoSceneIcon className="w-5 h-5 text-primary" />;
+            case EventType.SFX: return <SfxIcon className="w-5 h-5 text-primary" />;
             default: return null;
         }
     };
@@ -1212,6 +1427,14 @@ const SceneViewer: React.FC<{
                                     return (
                                         <p className="text-muted-foreground">
                                            {t('goToSceneLabel', language)} <span className="font-semibold text-foreground">{nextScene?.title || t('endStory', language)}</span>
+                                        </p>
+                                    );
+                                })()}
+                                {event.type === EventType.SFX && (() => {
+                                    const sfx = projectData.assets.find(a => a.id === event.sfxAssetId);
+                                    return (
+                                        <p className="text-muted-foreground">
+                                           {t('sfx', language)}: <span className="font-semibold text-foreground">{sfx?.name || t('none', language)}</span>
                                         </p>
                                     );
                                 })()}
@@ -1266,10 +1489,10 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({ item, isReadOnly, ...p
 
     const renderContent = () => {
         if (item.type === 'character' || item.type === 'location' || item.type === 'item' || item.type === 'memo' || item.type === 'task' || item.type === 'plot') {
-            const dbItem = item as { type: 'character' | 'location' | 'item' | 'memo' | 'task' | 'plot', data: Character | Location | Item | Memo | Task | Plot };
+            // FIX: Pass `item` directly without casting to preserve the discriminated union type.
             return isReadOnly 
-                ? <DbItemViewer item={dbItem} projectData={props.projectData} />
-                : <DbItemEditor item={dbItem} {...props} />;
+                ? <DbItemViewer item={item} projectData={props.projectData} />
+                : <DbItemEditor item={item} {...props} />;
         }
         if (item.type === 'asset') {
             const assetItem = item as { type: 'asset', data: Asset };

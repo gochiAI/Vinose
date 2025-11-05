@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { ProjectData, Character, Location, Item, Scene, SceneEvent, DbItemType, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, ChoiceEvent, Choice, Relationship, GoToSceneEvent, Memo, Task, Asset, AssetType, Plot } from '../types';
+import { ProjectData, Character, Location, Item, Scene, SceneEvent, DbItemType, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, ChoiceEvent, Choice, Relationship, GoToSceneEvent, Memo, Task, Asset, AssetType, Plot, SfxEvent } from '../types';
 import { getProjectDataFromDB, saveProjectDataToDB } from '../utils/db';
 
 export const getInitialData = (): ProjectData => ({
@@ -168,6 +168,9 @@ export const useProjectData = () => {
                         if (event.type === EventType.ACTION && event.sfxAssetId === id) {
                            (newEvent as ActionEvent).sfxAssetId = undefined;
                         }
+                        if (event.type === EventType.SFX && event.sfxAssetId === id) {
+                           (newEvent as SfxEvent).sfxAssetId = '';
+                        }
                         return newEvent;
                     });
                     return { ...scene, events: newEvents };
@@ -198,7 +201,7 @@ export const useProjectData = () => {
     updateAndPersistData(prev => ({...prev, scenes: prev.scenes.filter(s => s.id !== id)}));
   }, [updateAndPersistData]);
 
-  const addSceneEvent = useCallback((sceneId: string, type: EventType) => {
+  const addSceneEvent = useCallback((sceneId: string, type: EventType, index?: number) => {
     if(!projectData) return;
     const newEvent: Partial<SceneEvent> = { id: `event-${Date.now()}`, type };
     if (type === EventType.DIALOGUE) {
@@ -215,13 +218,21 @@ export const useProjectData = () => {
         ];
     } else if (type === EventType.GOTO_SCENE) {
         (newEvent as GoToSceneEvent).nextSceneId = '';
+    } else if (type === EventType.SFX) {
+        (newEvent as SfxEvent).sfxAssetId = projectData.assets.find(a => a.type === AssetType.SFX)?.id || '';
     }
 
     updateAndPersistData(prev => ({
         ...prev,
         scenes: prev.scenes.map(s => {
             if (s.id === sceneId) {
-                return {...s, events: [...s.events, newEvent as SceneEvent]}
+                const newEvents = [...s.events];
+                if (index !== undefined && index >= 0 && index <= newEvents.length) {
+                    newEvents.splice(index, 0, newEvent as SceneEvent);
+                } else {
+                    newEvents.push(newEvent as SceneEvent);
+                }
+                return {...s, events: newEvents};
             }
             return s;
         })

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
-import { ProjectData } from '../types';
+import { ProjectData, SceneEvent, EventType, AssetType } from '../types';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from './ui/Button';
 import { Textarea } from './ui/Textarea';
@@ -21,16 +21,14 @@ interface Message {
 
 interface ChatBotProps {
   projectData: ProjectData;
-  onClose: () => void;
 }
 
-export const ChatBot: React.FC<ChatBotProps> = ({ projectData, onClose }) => {
+export const ChatBot: React.FC<ChatBotProps> = ({ projectData }) => {
   const { t, language } = useSettings();
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<number | null>(null);
   const [chatHistories, setChatHistories] = useState<{ id: number, title: string }[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -42,18 +40,48 @@ export const ChatBot: React.FC<ChatBotProps> = ({ projectData, onClose }) => {
   const isAvailable = !!process.env.API_KEY;
 
   const getSystemInstruction = useCallback(() => {
+    const summarizeEvent = (event: SceneEvent): string => {
+        switch(event.type) {
+            case EventType.DIALOGUE:
+                const char = projectData.characters.find(c => c.id === event.characterId);
+                return `Dialogue(${char?.name || 'Unknown'}): "${event.text}"`;
+            case EventType.ACTION:
+                return `Action: ${event.description}`;
+            case EventType.BACKGROUND_CHANGE:
+                const bg = projectData.assets.find(a => a.type === AssetType.BACKGROUND && a.id === event.backgroundAssetId);
+                return `Background -> ${bg?.name || 'Unknown'}`;
+            case EventType.CHOICE:
+                const choices = event.choices.map(c => {
+                    const scene = projectData.scenes.find(s => s.id === c.nextSceneId);
+                    return `"${c.text}" -> ${scene?.title || 'End'}`;
+                }).join(', ');
+                return `Choice: [${choices}]`;
+            case EventType.GOTO_SCENE:
+                const scene = projectData.scenes.find(s => s.id === event.nextSceneId);
+                return `Go to scene -> ${scene?.title || 'End'}`;
+            case EventType.SFX:
+                const sfx = projectData.assets.find(a => a.type === AssetType.SFX && a.id === event.sfxAssetId);
+                return `SFX: ${sfx?.name || 'Unknown'}`;
+            default:
+                return `Unknown event`;
+        }
+    };
+
     const context = {
         projectName: projectData.projectName,
         characters: projectData.characters.map(c => ({ name: c.name, description: c.description?.substring(0, 100) })),
         locations: projectData.locations.map(l => ({ name: l.name, description: l.description?.substring(0, 100) })),
         items: projectData.items.map(i => ({ name: i.name, description: i.description?.substring(0, 100) })),
         plots: projectData.plots.map(p => p.title),
-        scenes: projectData.scenes.map(s => ({ title: s.title, eventCount: s.events.length }))
+        scenes: projectData.scenes.map(s => ({ 
+            title: s.title, 
+            summary: s.events.map(summarizeEvent)
+        }))
     };
     
     return `You are a helpful and creative AI assistant for a visual novel writer.
 Your role is to help the user with their project by answering questions, providing suggestions for characters, plots, scenes, and dialogue, and helping them organize their ideas.
-You have access to the user's current project data for context.
+You have access to the user's current project data for context. Analyze the existing scenes and their order to understand the story's flow before making suggestions.
 Always be encouraging and constructive.
 Keep your answers concise but informative.
 Format your responses using Markdown for readability.
@@ -132,11 +160,9 @@ ${JSON.stringify(context, null, 2)}
   }, [loadChat, startNewChat, t, language]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 10);
     if (isAvailable) {
         loadAllHistories();
     }
-    return () => clearTimeout(timer);
   }, [isAvailable, loadAllHistories]);
 
   useEffect(() => {
@@ -153,11 +179,6 @@ ${JSON.stringify(context, null, 2)}
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
-
-  const handleClose = () => {
-    setIsVisible(false);
-    setTimeout(onClose, 300);
-  };
 
   const handleSendMessage = async () => {
     if (!userInput.trim() || isLoading || !chat) return;
@@ -222,19 +243,15 @@ ${JSON.stringify(context, null, 2)}
   };
 
   return (
-    <div className={`fixed inset-y-0 right-0 z-50 bg-card shadow-2xl flex flex-col w-full max-w-lg border-l border-border transform transition-transform duration-300 ${isVisible ? 'translate-x-0' : 'translate-x-full'}`}>
-      <div className="flex justify-between items-center p-4 flex-shrink-0 border-b border-border">
-        <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <SparklesIcon className="w-6 h-6 text-primary" />
-          {t('aiAssistant', language)}
-        </h2>
+    <div className="flex flex-col flex-1 bg-background border-2 border-dashed border-border rounded-lg min-h-0">
+      <div className="flex justify-end items-center p-2 flex-shrink-0 border-b border-border">
         <div className="flex items-center gap-2">
            <div className="relative" ref={historyPanelRef}>
               <button onClick={() => setIsHistoryOpen(prev => !prev)} className="p-2 rounded-full hover:bg-secondary text-muted-foreground" title={t('chatHistory', language)} disabled={!isAvailable}>
                   <HistoryIcon className="w-5 h-5" />
               </button>
               {isHistoryOpen && (
-                <div className="absolute top-full right-0 mt-2 z-20 w-72 bg-background border border-border rounded-lg shadow-xl animate-fade-in-fast">
+                <div className="absolute top-full right-0 mt-2 z-20 w-72 bg-card border border-border rounded-lg shadow-xl animate-fade-in-fast">
                     <div className="p-2 font-semibold text-sm border-b border-border text-foreground">{t('chatHistory', language)}</div>
                     <ul className="py-1 max-h-80 overflow-y-auto">
                         {chatHistories.length > 0 ? (
@@ -257,9 +274,6 @@ ${JSON.stringify(context, null, 2)}
            </div>
            <button onClick={startNewChat} className="p-2 rounded-full hover:bg-secondary text-muted-foreground" title={t('startNewChat', language)} disabled={!isAvailable}>
                 <PlusIcon className="w-5 h-5" />
-           </button>
-           <button onClick={handleClose} className="p-2 rounded-full hover:bg-secondary text-muted-foreground" title={t('close', language)}>
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
            </button>
         </div>
       </div>

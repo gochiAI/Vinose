@@ -22,6 +22,8 @@ const translationData = {
     status: 'Status',
     completedStatus: 'Completed',
     incomplete: 'Incomplete',
+    cancel: 'Cancel',
+    create: 'Create',
     // Header & ProjectDB
     projectDB: 'Project DB',
     locations: 'Locations',
@@ -60,6 +62,8 @@ const translationData = {
     addRelationship: 'Add Relationship',
     sceneTitle: 'Scene Title',
     addNewEvent: 'Add New Event',
+    addEvent: 'Add Event',
+    addEventHere: 'Add event here',
     dialogue: 'Dialogue',
     action: 'Narration / Action',
     bgChange: 'BG Change',
@@ -90,8 +94,7 @@ const translationData = {
     task: 'Task',
     asset: 'Asset',
     createNewScene: '+ Create New Scene...',
-    buttons: 'Buttons',
-    command: 'Command',
+    commandMode: 'Command Mode',
     addFromText: 'Add from Text',
     commandModePlaceholder: `Enter commands to quickly add events.
 Example:
@@ -99,6 +102,7 @@ Example:
 Where am I?
 /action
 The protagonist looks around the room.
+/sfx Door Creak
 /choice
 - Look left -> Opening Scene
 - Investigate the desk`,
@@ -118,6 +122,9 @@ The protagonist looks around the room.
     noAssetsOfType: 'No assets of this type yet.',
     characterSprite: 'Character Sprite',
     soundEffect: 'Sound Effect',
+    createAssetPlaceholder: 'Create Asset Placeholder',
+    noFileUploaded: 'No file has been uploaded for this asset yet.',
+    uploadFile: 'Upload File',
     // Settings Modal
     theme: 'Theme',
     light: 'Light',
@@ -226,6 +233,8 @@ The protagonist looks around the room.
     status: 'ステータス',
     completedStatus: '完了',
     incomplete: '未完了',
+    cancel: 'キャンセル',
+    create: '作成',
     // Header & ProjectDB
     projectDB: 'プロジェクトDB',
     locations: '場所',
@@ -264,6 +273,8 @@ The protagonist looks around the room.
     addRelationship: '関係を追加',
     sceneTitle: 'シーンのタイトル',
     addNewEvent: '新規イベントを追加:',
+    addEvent: 'イベントを追加',
+    addEventHere: 'ここにイベントを追加',
     dialogue: '会話',
     action: 'ナレーション / 行動',
     bgChange: '背景変更',
@@ -294,8 +305,7 @@ The protagonist looks around the room.
     task: 'タスク',
     asset: 'アセット',
     createNewScene: '＋ 新しいシーンを作成...',
-    buttons: 'ボタン',
-    command: 'コマンド',
+    commandMode: 'コマンドモード',
     addFromText: 'テキストから追加',
     commandModePlaceholder: `コマンドを入力して、イベントを素早く追加します。
 例:
@@ -303,6 +313,7 @@ The protagonist looks around the room.
 ここはどこだ...？
 /action
 主人公はあたりを見回す。
+/sfx ドアのきしみ
 /choice
 - 左を見る -> オープニングシーン
 - 机を調べる`,
@@ -322,6 +333,9 @@ The protagonist looks around the room.
     noAssetsOfType: 'この種類のアセットはまだありません。',
     characterSprite: 'キャラクタースプライト',
     soundEffect: '効果音',
+    createAssetPlaceholder: 'アセットプレースホルダーを作成',
+    noFileUploaded: 'このアセットにはまだファイルがアップロードされていません。',
+    uploadFile: 'ファイルをアップロード',
     // Settings Modal
     theme: 'テーマ',
     light: 'ライト',

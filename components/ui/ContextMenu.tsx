@@ -1,12 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 
-export interface ContextMenuItem {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  isSeparator?: boolean;
-  isDanger?: boolean;
-}
+// FIX: Changed to a discriminated union to properly type separators.
+export type ContextMenuItem =
+  | {
+      label: string;
+      onClick: () => void;
+      disabled?: boolean;
+      isSeparator?: false;
+      isDanger?: boolean;
+    }
+  | { isSeparator: true };
 
 interface ContextMenuProps {
   x: number;

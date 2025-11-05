@@ -10,6 +10,7 @@ import { ImageIcon } from './icons/ImageIcon';
 import { Button } from './ui/Button';
 import { ContextMenuItem } from './ui/ContextMenu';
 import { PlotIcon } from './icons/PlotIcon';
+import { Input } from './ui/Input';
 
 type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot';
 
@@ -30,6 +31,8 @@ interface ProjectDBProps {
 export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onEditItem, onViewItem, onAddDbItem, onAddAsset, selectedItemId, activeTab, onTabChange, showContextMenu, onDeleteItem }) => {
     const { t, language } = useSettings();
     const [assetTypeToUpload, setAssetTypeToUpload] = useState<AssetType>(AssetType.BACKGROUND);
+    const [newAssetName, setNewAssetName] = useState('');
+    const [newAssetType, setNewAssetType] = useState<AssetType>(AssetType.BACKGROUND);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const TABS: { type: TabType, label: string, icon: React.FC<{className?: string}> }[] = [
@@ -57,7 +60,7 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onEditItem, o
         const reader = new FileReader();
         reader.onload = (e) => {
             const dataUrl = e.target?.result as string;
-            onAddAsset({
+            const newId = onAddAsset({
                 name: file.name.split('.').slice(0, -1).join('.'), // remove extension
                 type: assetTypeToUpload,
                 data: dataUrl,
@@ -68,12 +71,48 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onEditItem, o
         event.target.value = ''; // Reset file input
     };
 
+    const handleAddPlaceholderAsset = () => {
+        if (!newAssetName.trim()) {
+            alert('Please enter a name for the asset.');
+            return;
+        }
+        onAddAsset({
+            name: newAssetName.trim(),
+            type: newAssetType,
+            data: '',
+            mimeType: '',
+        });
+        setNewAssetName('');
+    };
+
+
     const renderContent = () => {
         if (activeTab === 'asset') {
             const assetTypes = Object.values(AssetType);
             return (
                 <div className="mt-2">
                     <div className="p-2 space-y-2 border-b border-border mb-2">
+                        <h4 className="font-semibold text-sm text-muted-foreground select-none">{t('createAssetPlaceholder', language)}</h4>
+                        <Input
+                          placeholder={t('assetName', language)}
+                          value={newAssetName}
+                          onChange={(e) => setNewAssetName(e.target.value)}
+                          className="text-sm"
+                        />
+                        <select
+                            value={newAssetType}
+                            onChange={(e) => setNewAssetType(e.target.value as AssetType)}
+                            className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:ring-2 focus:ring-ring focus:border-ring outline-none text-sm"
+                        >
+                            {Object.values(AssetType).map(type => (
+                                <option key={type} value={type}>{t(type.toLowerCase() as any, language)}</option>
+                            ))}
+                        </select>
+                        <Button variant="secondary" size="sm" onClick={handleAddPlaceholderAsset} className="w-full">{t('create', language)}</Button>
+                    </div>
+
+                    <div className="p-2 space-y-2 border-b border-border mb-2">
+                        <h4 className="font-semibold text-sm text-muted-foreground select-none">{t('upload', language)}</h4>
                         <select
                             value={assetTypeToUpload}
                             onChange={(e) => setAssetTypeToUpload(e.target.value as AssetType)}

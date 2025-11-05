@@ -74,6 +74,7 @@ export enum EventType {
   BACKGROUND_CHANGE = 'BACKGROUND_CHANGE',
   CHOICE = 'CHOICE',
   GOTO_SCENE = 'GOTO_SCENE',
+  SFX = 'SFX',
 }
 
 export interface DialogueEvent {
@@ -116,7 +117,13 @@ export interface GoToSceneEvent {
     nextSceneId: string;
 }
 
-export type SceneEvent = DialogueEvent | ActionEvent | BackgroundChangeEvent | ChoiceEvent | GoToSceneEvent;
+export interface SfxEvent {
+  id: string;
+  type: EventType.SFX;
+  sfxAssetId: string;
+}
+
+export type SceneEvent = DialogueEvent | ActionEvent | BackgroundChangeEvent | ChoiceEvent | GoToSceneEvent | SfxEvent;
 
 export interface Scene {
   id: string;

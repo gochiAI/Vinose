@@ -1,9 +1,11 @@
 import React from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 
+type MainView = 'timeline' | 'characterGraph' | 'aiAssistant';
+
 interface ViewSwitcherProps {
-  currentView: 'timeline' | 'characterGraph';
-  onViewChange: (view: 'timeline' | 'characterGraph') => void;
+  currentView: MainView;
+  onViewChange: (view: MainView) => void;
 }
 
 export const ViewSwitcher: React.FC<ViewSwitcherProps> = ({ currentView, onViewChange }) => {
@@ -14,7 +16,7 @@ export const ViewSwitcher: React.FC<ViewSwitcherProps> = ({ currentView, onViewC
       <button
         onClick={() => onViewChange('timeline')}
         className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-          currentView === 'timeline' ? 'bg-card text-foreground' : 'text-muted-foreground hover:bg-border'
+          currentView === 'timeline' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:bg-border'
         }`}
       >
         {t('timeline', language)}
@@ -22,10 +24,18 @@ export const ViewSwitcher: React.FC<ViewSwitcherProps> = ({ currentView, onViewC
       <button
         onClick={() => onViewChange('characterGraph')}
         className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-          currentView === 'characterGraph' ? 'bg-card text-foreground' : 'text-muted-foreground hover:bg-border'
+          currentView === 'characterGraph' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:bg-border'
         }`}
       >
         {t('characterGraph', language)}
+      </button>
+      <button
+        onClick={() => onViewChange('aiAssistant')}
+        className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+          currentView === 'aiAssistant' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:bg-border'
+        }`}
+      >
+        {t('aiAssistant', language)}
       </button>
     </div>
   );

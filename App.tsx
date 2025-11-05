@@ -14,11 +14,11 @@ import { SettingsModal } from './components/SettingsModal';
 import { SearchResult } from './components/SearchBar';
 import { ContextMenu, ContextMenuItem } from './components/ui/ContextMenu';
 import { UserGuide } from './components/UserGuide';
-import { ChatIcon } from './components/icons/ChatIcon';
 import { ChatBot } from './components/ChatBot';
 
 type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot';
 type SheetMode = 'view' | 'edit';
+type MainView = 'timeline' | 'characterGraph' | 'aiAssistant';
 
 const AppContent: React.FC = () => {
   const {
@@ -45,11 +45,10 @@ const AppContent: React.FC = () => {
   const { t, language } = useSettings();
   const [activeInfo, setActiveInfo] = useState<{ type: DbItemType | 'scene', id: string, mode: SheetMode } | null>(null);
   const [activeDbTab, setActiveDbTab] = useState<TabType>('location');
-  const [mainView, setMainView] = useState<'timeline' | 'characterGraph'>('timeline');
+  const [mainView, setMainView] = useState<MainView>('timeline');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
 
@@ -318,6 +317,48 @@ const AppContent: React.FC = () => {
     );
   }
 
+  const renderMainView = () => {
+    switch (mainView) {
+      case 'characterGraph':
+        return (
+          <CharacterGraph 
+            characters={projectData.characters}
+            relationships={projectData.relationships}
+            onEditCharacter={(id) => handleEditItem('character', id)}
+            onViewCharacter={(id) => handleViewItem('character', id)}
+            selectedCharacterId={activeInfo?.type === 'character' ? activeInfo.id : undefined}
+            showContextMenu={showContextMenu}
+            onAddCharacter={handleAddCharacter}
+            onDeleteCharacter={(id) => handleDeleteWithConfirmation('character', id)}
+          />
+        );
+      case 'aiAssistant':
+        return <ChatBot projectData={projectData} />;
+      case 'timeline':
+      default:
+        return (
+          <Timeline
+            scenes={projectData.scenes}
+            onEditScene={(id) => handleEditItem('scene', id)}
+            onViewScene={handleViewScene}
+            onDeleteScene={handleDeleteSceneWithConfirmation}
+            selectedSceneId={activeInfo?.type === 'scene' ? activeInfo.id : undefined}
+            showContextMenu={showContextMenu}
+            onAddScene={handleAddScene}
+          />
+        );
+    }
+  };
+
+  const getTitle = () => {
+    switch (mainView) {
+        case 'timeline': return t('timelineFlow', language);
+        case 'characterGraph': return t('characterRelationshipMap', language);
+        case 'aiAssistant': return t('aiAssistant', language);
+        default: return '';
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen font-sans bg-background text-foreground">
       <Header 
@@ -350,7 +391,7 @@ const AppContent: React.FC = () => {
             <div className="flex-1 p-4 overflow-hidden flex flex-col">
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
                     <h1 className="text-2xl font-bold">
-                        {mainView === 'timeline' ? t('timelineFlow', language) : t('characterRelationshipMap', language)}
+                       {getTitle()}
                     </h1>
                     <div className="flex items-center gap-4">
                         {mainView === 'timeline' && (
@@ -370,28 +411,7 @@ const AppContent: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                {mainView === 'characterGraph' ? (
-                  <CharacterGraph 
-                    characters={projectData.characters}
-                    relationships={projectData.relationships}
-                    onEditCharacter={(id) => handleEditItem('character', id)}
-                    onViewCharacter={(id) => handleViewItem('character', id)}
-                    selectedCharacterId={activeInfo?.type === 'character' ? activeInfo.id : undefined}
-                    showContextMenu={showContextMenu}
-                    onAddCharacter={handleAddCharacter}
-                    onDeleteCharacter={(id) => handleDeleteWithConfirmation('character', id)}
-                  />
-                ) : (
-                  <Timeline
-                    scenes={projectData.scenes}
-                    onEditScene={(id) => handleEditItem('scene', id)}
-                    onViewScene={handleViewScene}
-                    onDeleteScene={handleDeleteSceneWithConfirmation}
-                    selectedSceneId={activeInfo?.type === 'scene' ? activeInfo.id : undefined}
-                    showContextMenu={showContextMenu}
-                    onAddScene={handleAddScene}
-                  />
-                )}
+                {renderMainView()}
             </div>
         </div>
       </main>
@@ -429,20 +449,6 @@ const AppContent: React.FC = () => {
         />
       )}
       {isGuideOpen && <UserGuide onClose={handleCloseGuide} onStepChange={handleStepChange} />}
-      <button
-        onClick={() => setIsChatOpen(true)}
-        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary-hover transition-transform transform hover:scale-110 flex items-center justify-center"
-        title={t('aiAssistant', language)}
-      >
-        <ChatIcon className="w-7 h-7" />
-      </button>
-
-      {isChatOpen && (
-        <ChatBot 
-            projectData={projectData}
-            onClose={() => setIsChatOpen(false)}
-        />
-      )}
     </div>
   );
 }
