@@ -5,12 +5,17 @@ import { HomeIcon } from './icons/HomeIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { CharacterIcon } from './icons/CharacterIcon';
 import { useSettings } from '../contexts/SettingsContext';
+import { ContextMenuItem } from './ui/ContextMenu';
 
 interface CharacterGraphProps {
   characters: Character[];
   relationships: Relationship[];
-  onSelectCharacter: (id: string) => void;
+  onEditCharacter: (id: string) => void;
+  onViewCharacter: (id: string) => void;
   selectedCharacterId?: string;
+  onAddCharacter: () => void;
+  onDeleteCharacter: (id: string) => void;
+  showContextMenu: (event: React.MouseEvent, items: ContextMenuItem[]) => void;
 }
 
 const NODE_RADIUS = 40;
@@ -18,11 +23,12 @@ const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 2;
 
 
-const CharacterNode = React.memo(({ character, position, isSelected, onClick, t, language }: {
+const CharacterNode = React.memo(({ character, position, isSelected, onClick, onContextMenu, t, language }: {
     character: Character;
     position: { x: number; y: number };
     isSelected: boolean;
     onClick: () => void;
+    onContextMenu: (e: React.MouseEvent) => void;
     t: (key: any, lang: any) => string;
     language: 'en' | 'ja';
 }) => (
@@ -37,6 +43,7 @@ const CharacterNode = React.memo(({ character, position, isSelected, onClick, t,
         isSelected ? 'bg-secondary ring-2 ring-ring shadow-lg' : 'bg-card hover:bg-secondary shadow-md'
       }`}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       title={character.name}
     >
         <CharacterIcon className="w-6 h-6 text-primary mb-1"/>
@@ -46,7 +53,7 @@ const CharacterNode = React.memo(({ character, position, isSelected, onClick, t,
     </div>
 ));
 
-export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, relationships, onSelectCharacter, selectedCharacterId }) => {
+export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, relationships, onEditCharacter, onViewCharacter, selectedCharacterId, onAddCharacter, onDeleteCharacter, showContextMenu }) => {
   const [viewTransform, setViewTransform] = useState({ x: 20, y: 20, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -163,8 +170,15 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
       }
   };
 
+  const handleContainerContextMenu = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.scene-node')) return;
+    showContextMenu(e, [
+        { label: t('addCharacter', language), onClick: onAddCharacter },
+    ]);
+  };
+
   return (
-    <div className="flex-1 relative">
+    <div className="flex-1 relative" data-tour-id="character-graph-view">
         <div 
             ref={containerRef}
             className="w-full h-full bg-background border-2 border-dashed border-border rounded-lg overflow-hidden relative cursor-grab"
@@ -173,6 +187,7 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
             onMouseLeave={handleMouseUp}
             onMouseMove={handleMouseMove}
             onWheel={handleWheel}
+            onContextMenu={handleContainerContextMenu}
         >
             <div
                 className="absolute"
@@ -233,7 +248,15 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
                             character={char}
                             position={position}
                             isSelected={char.id === selectedCharacterId}
-                            onClick={() => onSelectCharacter(char.id)}
+                            onClick={() => onEditCharacter(char.id)}
+                            onContextMenu={(e) => {
+                                showContextMenu(e, [
+                                    { label: `${t('view', language)} ${t('character', language)}`, onClick: () => onViewCharacter(char.id) },
+                                    { label: `${t('edit', language)} ${t('character', language)}`, onClick: () => onEditCharacter(char.id) },
+                                    { isSeparator: true },
+                                    { label: `${t('delete', language)} ${t('character', language)}`, onClick: () => onDeleteCharacter(char.id), isDanger: true },
+                                ]);
+                            }}
                             t={t}
                             language={language}
                         />

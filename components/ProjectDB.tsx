@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from 'react';
 import { ProjectData, DbItemType, AssetType, Asset } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
@@ -9,21 +8,26 @@ import { MemoIcon } from './icons/MemoIcon';
 import { TaskIcon } from './icons/TaskIcon';
 import { ImageIcon } from './icons/ImageIcon';
 import { Button } from './ui/Button';
+import { ContextMenuItem } from './ui/ContextMenu';
+import { PlotIcon } from './icons/PlotIcon';
 
-type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset';
+type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot';
 
 interface ProjectDBProps {
   projectData: ProjectData;
-  onSelectItem: (type: DbItemType, id: string) => void;
+  onEditItem: (type: DbItemType, id: string) => void;
+  onViewItem: (type: DbItemType, id: string) => void;
   onAddDbItem: (type: Exclude<TabType, 'asset'>) => string;
   onAddAsset: (asset: Omit<Asset, 'id'>) => void;
   selectedItemId?: string;
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
+  showContextMenu: (event: React.MouseEvent, items: ContextMenuItem[]) => void;
+  onDeleteItem: (type: DbItemType, id: string) => void;
 }
 
 
-export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onSelectItem, onAddDbItem, onAddAsset, selectedItemId, activeTab, onTabChange }) => {
+export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onEditItem, onViewItem, onAddDbItem, onAddAsset, selectedItemId, activeTab, onTabChange, showContextMenu, onDeleteItem }) => {
     const { t, language } = useSettings();
     const [assetTypeToUpload, setAssetTypeToUpload] = useState<AssetType>(AssetType.BACKGROUND);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,13 +36,14 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onSelectItem,
         { type: 'location', label: t('locations', language), icon: LocationIcon },
         { type: 'item', label: t('items', language), icon: ItemIcon },
         { type: 'memo', label: t('memos', language), icon: MemoIcon },
+        { type: 'plot', label: t('plots', language), icon: PlotIcon },
         { type: 'task', label: t('tasks', language), icon: TaskIcon },
         { type: 'asset', label: t('assets', language), icon: ImageIcon },
     ];
 
     const handleAddItem = (type: Exclude<TabType, 'asset'>) => {
         const newId = onAddDbItem(type);
-        onSelectItem(type, newId);
+        onEditItem(type, newId);
     };
 
     const handleFileUploadClick = () => {
@@ -101,7 +106,15 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onSelectItem,
                                         <li key={asset.id}>
                                             <a
                                                 href="#"
-                                                onClick={(e) => { e.preventDefault(); onSelectItem('asset', asset.id); }}
+                                                onClick={(e) => { e.preventDefault(); onEditItem('asset', asset.id); }}
+                                                onContextMenu={(e) => {
+                                                  showContextMenu(e, [
+                                                      { label: `${t('view', language)} ${t('asset', language)}`, onClick: () => onViewItem('asset', asset.id) },
+                                                      { label: `${t('edit', language)} ${t('asset', language)}`, onClick: () => onEditItem('asset', asset.id) },
+                                                      { isSeparator: true },
+                                                      { label: `${t('delete', language)} ${t('asset', language)}`, onClick: () => onDeleteItem('asset', asset.id), isDanger: true }
+                                                  ]);
+                                                }}
                                                 className={`block p-2 text-sm rounded-md truncate ${selectedItemId === asset.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-secondary-foreground'}`}
                                             >
                                                 {/* FIX: Cast type to 'any' to satisfy TranslationKey type for `t` function. */}
@@ -122,6 +135,7 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onSelectItem,
             item: { items: projectData.items, nameKey: 'name' as const },
             memo: { items: projectData.memos, nameKey: 'title' as const },
             task: { items: projectData.tasks, nameKey: 'title' as const },
+            plot: { items: projectData.plots, nameKey: 'title' as const },
         };
         
         const { items, nameKey } = dataMap[activeTab];
@@ -144,7 +158,15 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onSelectItem,
                         <li key={item.id}>
                             <a
                                 href="#"
-                                onClick={(e) => { e.preventDefault(); onSelectItem(activeTab, item.id); }}
+                                onClick={(e) => { e.preventDefault(); onEditItem(activeTab, item.id); }}
+                                onContextMenu={(e) => {
+                                    showContextMenu(e, [
+                                        { label: `${t('view', language)} ${t(activeTab, language)}`, onClick: () => onViewItem(activeTab, item.id) },
+                                        { label: `${t('edit', language)} ${t(activeTab, language)}`, onClick: () => onEditItem(activeTab, item.id) },
+                                        { isSeparator: true },
+                                        { label: `${t('delete', language)} ${t(activeTab, language)}`, onClick: () => onDeleteItem(activeTab, item.id), isDanger: true }
+                                    ]);
+                                }}
                                 className={`block p-2 text-sm rounded-md truncate ${selectedItemId === item.id && (item.id.startsWith(activeTab.slice(0,4))) ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-secondary-foreground'}`}
                             >
                                 {item[nameKey] || `${t('unnamed', language)} ${t(activeTab, language)}`}
@@ -157,7 +179,7 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onSelectItem,
     };
 
   return (
-    <aside className="w-64 bg-card p-2 border-r border-border flex-shrink-0 flex flex-col">
+    <aside className="w-64 bg-card p-2 border-r border-border flex-shrink-0 flex flex-col" data-tour-id="sidebar">
       <h2 className="text-lg font-semibold p-2 mb-2 select-none flex-shrink-0">{t('projectDB', language)}</h2>
       <div className="border-b border-border pb-2">
           <nav className="grid grid-cols-3 gap-1">

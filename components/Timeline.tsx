@@ -6,12 +6,16 @@ import { TrashIcon } from './icons/TrashIcon';
 import { MinusIcon } from './icons/MinusIcon';
 import { HomeIcon } from './icons/HomeIcon';
 import { useSettings } from '../contexts/SettingsContext';
+import { ContextMenuItem } from './ui/ContextMenu';
 
 interface TimelineProps {
   scenes: Scene[];
-  onSelectScene: (id: string) => void;
+  onEditScene: (id: string) => void;
+  onViewScene: (id: string) => void;
   onDeleteScene: (id: string) => void;
   selectedSceneId?: string;
+  onAddScene: () => void;
+  showContextMenu: (event: React.MouseEvent, items: ContextMenuItem[]) => void;
 }
 
 const NODE_WIDTH = 200;
@@ -26,13 +30,14 @@ const getCurvePath = (x1: number, y1: number, x2: number, y2: number): string =>
   return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
 };
 
-const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onDelete, t, language }: {
+const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onDelete, onContextMenu, t, language }: {
     scene: Scene;
     index: number;
     position: { x: number; y: number };
     isSelected: boolean;
     onClick: () => void;
     onDelete: (e: React.MouseEvent) => void;
+    onContextMenu: (e: React.MouseEvent) => void;
     t: (key: any, lang: any) => string;
     language: 'en' | 'ja';
 }) => (
@@ -47,6 +52,7 @@ const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onD
         isSelected ? 'bg-secondary ring-2 ring-ring shadow-lg' : 'bg-card hover:bg-secondary shadow-md'
       }`}
       onClick={onClick}
+      onContextMenu={onContextMenu}
     >
         <div className="flex justify-between items-start">
             <h3 className="font-bold text-sm text-foreground truncate" title={scene.title || t('untitledScene', language)}>
@@ -66,7 +72,7 @@ const SceneNode = React.memo(({ scene, index, position, isSelected, onClick, onD
     </div>
 ));
 
-export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDeleteScene, selectedSceneId }) => {
+export const Timeline: React.FC<TimelineProps> = ({ scenes, onEditScene, onViewScene, onDeleteScene, selectedSceneId, onAddScene, showContextMenu }) => {
   const [viewTransform, setViewTransform] = useState({ x: 20, y: 20, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -246,8 +252,15 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
       }
   };
 
+  const handleContainerContextMenu = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.scene-node')) return;
+    showContextMenu(e, [
+        { label: t('addScene', language), onClick: onAddScene },
+    ]);
+  };
+
   return (
-    <div className="flex-1 relative">
+    <div className="flex-1 relative" data-tour-id="timeline-view">
         <div 
             ref={containerRef}
             className="w-full h-full bg-background border-2 border-dashed border-border rounded-lg overflow-hidden relative cursor-grab"
@@ -256,6 +269,7 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
             onMouseLeave={handleMouseUp}
             onMouseMove={handleMouseMove}
             onWheel={handleWheel}
+            onContextMenu={handleContainerContextMenu}
         >
             <div
                 className="absolute"
@@ -314,10 +328,18 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
                             index={index}
                             position={position}
                             isSelected={scene.id === selectedSceneId}
-                            onClick={() => onSelectScene(scene.id)}
+                            onClick={() => onEditScene(scene.id)}
                             onDelete={(e) => {
                                 e.stopPropagation();
                                 onDeleteScene(scene.id);
+                            }}
+                            onContextMenu={(e) => {
+                                showContextMenu(e, [
+                                  { label: `${t('view', language)} ${t('scene', language)}`, onClick: () => onViewScene(scene.id) },
+                                  { label: `${t('edit', language)} ${t('scene', language)}`, onClick: () => onEditScene(scene.id) },
+                                  { isSeparator: true },
+                                  { label: `${t('delete', language)} ${t('scene', language)}`, onClick: () => onDeleteScene(scene.id), isDanger: true },
+                                ]);
                             }}
                             t={t}
                             language={language}
@@ -328,9 +350,7 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, onSelectScene, onDel
                 {scenes.length === 0 && (
                   <div className="absolute top-1/2 left-1/2 text-center" style={{ transform: `translate(-50%, -50%) scale(${1 / viewTransform.scale})` }}>
                       <p className="text-muted-foreground">{t('noScenes', language)}</p>
-                      <Button onClick={() => {
-                          // This should be connected to the App's add scene function
-                      }} size="sm" className="mt-4">
+                      <Button onClick={onAddScene} size="sm" className="mt-4">
                           {t('createFirstScene', language)}
                       </Button>
                   </div>

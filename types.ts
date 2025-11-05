@@ -1,26 +1,43 @@
 
+export interface CustomProperty {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface Character {
   id: string;
   name: string;
   description: string;
+  properties?: CustomProperty[];
 }
 
 export interface Location {
   id: string;
   name: string;
   description: string;
+  properties?: CustomProperty[];
 }
 
 export interface Item {
   id: string;
   name: string;
   description: string;
+  properties?: CustomProperty[];
 }
 
 export interface Memo {
   id: string;
   title: string;
   content: string;
+  properties?: CustomProperty[];
+}
+
+export interface Plot {
+  id: string;
+  title: string;
+  content: string;
+  properties?: CustomProperty[];
 }
 
 export interface Task {
@@ -114,6 +131,7 @@ export interface ProjectData {
   items: Item[];
   memos: Memo[];
   tasks: Task[];
+  plots: Plot[];
   scenes: Scene[];
   relationships: Relationship[];
   assets: Asset[];
@@ -125,8 +143,9 @@ export type EditableItem =
   | { type: 'item'; data: Item }
   | { type: 'memo'; data: Memo }
   | { type: 'task'; data: Task }
+  | { type: 'plot'; data: Plot }
   | { type: 'scene'; data: Scene }
   | { type: 'asset'; data: Asset }
   | null;
 
-export type DbItemType = 'character' | 'location' | 'item' | 'memo' | 'task' | 'asset';
+export type DbItemType = 'character' | 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot';

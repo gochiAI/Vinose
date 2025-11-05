@@ -2,16 +2,25 @@ import React from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from './ui/Button';
 
+// A simple check for the existence of the API key from environment variables.
+const isAiAvailable = !!process.env.API_KEY;
+
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
     onResetData: () => void;
+    onOpenGuide: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onResetData }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onResetData, onOpenGuide }) => {
     const { theme, setTheme, language, setLanguage, t } = useSettings();
 
     if (!isOpen) return null;
+
+    const handleShowGuide = () => {
+        onClose();
+        onOpenGuide();
+    };
 
     return (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
@@ -64,6 +73,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             <option value="en">English</option>
                             <option value="ja">日本語</option>
                         </select>
+                    </div>
+
+                    {/* User Guide */}
+                    <div className="space-y-2">
+                        <label className="text-md font-semibold text-foreground">{t('userGuide', language)}</label>
+                         <Button variant="secondary" onClick={handleShowGuide} className="w-full">
+                            {t('showUserGuide', language)}
+                         </Button>
+                    </div>
+
+                    {/* AI Settings */}
+                    <div className="space-y-2 pt-4 border-t border-border">
+                         <h3 className="text-md font-semibold text-foreground">{t('aiSettings', language)}</h3>
+                         {isAiAvailable ? (
+                            <>
+                                <p className="text-sm text-green-600 dark:text-green-400">{t('aiEnabled', language)}</p>
+                                <p className="text-xs text-muted-foreground">{t('aiEnabledHint', language)}</p>
+                            </>
+                         ) : (
+                            <>
+                                <p className="text-sm text-yellow-600 dark:text-yellow-400">{t('aiDisabled', language)}</p>
+                                <p className="text-xs text-muted-foreground">{t('aiDisabledHint', language)}</p>
+                            </>
+                         )}
                     </div>
 
                     {/* Data Management */}

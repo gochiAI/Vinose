@@ -111,9 +111,10 @@ export const Header: React.FC<HeaderProps> = ({
             value={projectData.projectName}
             onChange={(e) => updateProjectName(e.target.value)}
             className="text-lg font-bold bg-transparent border-none text-foreground focus:outline-none focus:ring-0 w-full"
+            data-tour-id="project-name"
         />
       </div>
-      <div className="flex-1 flex justify-center px-4">
+      <div className="flex-1 flex justify-center px-4" data-tour-id="search-bar">
         <SearchBar 
             query={searchQuery}
             onQueryChange={onSearchQueryChange}
@@ -122,15 +123,17 @@ export const Header: React.FC<HeaderProps> = ({
         />
       </div>
       <div className="flex items-center justify-end gap-2 w-1/3">
-         <button onClick={onOpenSettings} className="p-2 rounded-md hover:bg-secondary text-muted-foreground" title={t('settings', language)}>
+         <button onClick={onOpenSettings} className="p-2 rounded-md hover:bg-secondary text-muted-foreground" title={t('settings', language)} data-tour-id="settings-button">
             <GearIcon className="w-6 h-6" />
         </button>
-        <Button variant="secondary" size="sm" onClick={handleImportClick} title={t('importProject', language)}>
-          {t('import', language)}...
-        </Button>
-        <Button variant="primary" size="sm" onClick={handleExport} title={t('exportProject', language)}>
-          {t('export', language)} .vns
-        </Button>
+        <div className="flex items-center gap-2" data-tour-id="io-buttons">
+          <Button variant="secondary" size="sm" onClick={handleImportClick} title={t('importProject', language)}>
+            {t('import', language)}...
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleExport} title={t('exportProject', language)}>
+            {t('export', language)} .vns
+          </Button>
+        </div>
         <input
           type="file"
           ref={fileInputRef}

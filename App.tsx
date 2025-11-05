@@ -1,19 +1,24 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Header } from './components/Header';
 import { ProjectDB } from './components/ProjectDB';
 import { Timeline } from './components/Timeline';
 import { CharacterGraph } from './components/CharacterGraph';
 import { EditorSheet } from './components/EditorSheet';
 import { ViewSwitcher } from './components/ViewSwitcher';
-import { EditableItem, DbItemType, Scene, Character, Location, Item, Memo, Task, Asset, DialogueEvent, ActionEvent, EventType } from './types';
+import { EditableItem, DbItemType, Scene, Character, Location, Item, Memo, Task, Asset, DialogueEvent, ActionEvent, EventType, SceneEvent, Plot } from './types';
 import { useProjectData } from './hooks/useProjectData';
 import { Button } from './components/ui/Button';
 import { PlusIcon } from './components/icons/PlusIcon';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { SettingsModal } from './components/SettingsModal';
 import { SearchResult } from './components/SearchBar';
+import { ContextMenu, ContextMenuItem } from './components/ui/ContextMenu';
+import { UserGuide } from './components/UserGuide';
+import { ChatIcon } from './components/icons/ChatIcon';
+import { ChatBot } from './components/ChatBot';
 
-type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset';
+type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot';
+type SheetMode = 'view' | 'edit';
 
 const AppContent: React.FC = () => {
   const {
@@ -28,6 +33,7 @@ const AppContent: React.FC = () => {
     updateScene,
     deleteScene,
     addSceneEvent,
+    addSceneEvents,
     updateSceneEvent,
     deleteSceneEvent,
     addRelationship,
@@ -37,12 +43,76 @@ const AppContent: React.FC = () => {
   } = useProjectData();
 
   const { t, language } = useSettings();
-  const [selectedInfo, setSelectedInfo] = useState<{ type: DbItemType | 'scene', id: string } | null>(null);
+  const [activeInfo, setActiveInfo] = useState<{ type: DbItemType | 'scene', id: string, mode: SheetMode } | null>(null);
   const [activeDbTab, setActiveDbTab] = useState<TabType>('location');
   const [mainView, setMainView] = useState<'timeline' | 'characterGraph'>('timeline');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
+
+  useEffect(() => {
+    const guideCompleted = localStorage.getItem('vns-guide-completed');
+    if (!guideCompleted) {
+        setTimeout(() => setIsGuideOpen(true), 500);
+    }
+  }, []);
+
+  const handleOpenGuide = useCallback(() => {
+    setIsGuideOpen(true);
+  }, []);
+
+  const handleCloseGuide = useCallback(() => {
+    setIsGuideOpen(false);
+    localStorage.setItem('vns-guide-completed', 'true');
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    setActiveInfo(null);
+  }, []);
+
+  const handleOpenItem = useCallback((type: DbItemType | 'scene', id: string, mode: SheetMode) => {
+    if (type === 'character') {
+      setMainView('characterGraph');
+    } else if (type === 'location' || type === 'item' || type === 'memo' || type === 'task' || type === 'asset' || type === 'plot') {
+      setActiveDbTab(type);
+      setMainView('timeline');
+    } else if (type === 'scene') {
+      setMainView('timeline');
+    }
+    setActiveInfo({ type, id, mode });
+  }, []);
+
+  const handleEditItem = (type: DbItemType | 'scene', id: string) => handleOpenItem(type, id, 'edit');
+  const handleViewItem = (type: DbItemType, id: string) => handleOpenItem(type, id, 'view');
+  const handleViewScene = (id: string) => handleOpenItem('scene', id, 'view');
+
+
+  const handleStepChange = useCallback((stepKey: string) => {
+    const sidebarDependentSteps = ['sidebar', 'timeline', 'addScene', 'viewSwitcher', 'characterGraph', 'search'];
+    if (sidebarDependentSteps.includes(stepKey) && !isSidebarOpen) {
+      setIsSidebarOpen(true);
+    }
+
+    if (stepKey === 'characterGraph') {
+      if (mainView !== 'characterGraph') setMainView('characterGraph');
+    } else if (['timeline', 'addScene', 'sceneEditor'].includes(stepKey)) {
+      if (mainView !== 'timeline') setMainView('timeline');
+    }
+    
+    if (stepKey === 'sceneEditor') {
+        if (!activeInfo || activeInfo.type !== 'scene') {
+            const sceneToEdit = projectData?.scenes[0]?.id || addScene();
+            handleEditItem('scene', sceneToEdit);
+        }
+    } else {
+        if (activeInfo) {
+            closeSheet();
+        }
+    }
+  }, [isSidebarOpen, mainView, activeInfo, projectData, addScene, handleEditItem, closeSheet]);
 
   const searchResults = useMemo((): SearchResult[] => {
     if (!searchQuery.trim() || !projectData) return [];
@@ -53,23 +123,33 @@ const AppContent: React.FC = () => {
     const check = (text: string) => text.toLowerCase().includes(query);
 
     projectData.characters.forEach(c => {
-        if (check(c.name) || check(c.description)) {
+        const hasPropertyMatch = c.properties?.some(p => check(p.key) || check(p.value));
+        if (check(c.name) || check(c.description) || hasPropertyMatch) {
             results.push({ type: 'character', id: c.id, primary: c.name, secondary: c.description });
         }
     });
     projectData.locations.forEach(l => {
-        if (check(l.name) || check(l.description)) {
+        const hasPropertyMatch = l.properties?.some(p => check(p.key) || check(p.value));
+        if (check(l.name) || check(l.description) || hasPropertyMatch) {
             results.push({ type: 'location', id: l.id, primary: l.name, secondary: l.description });
         }
     });
     projectData.items.forEach(i => {
-        if (check(i.name) || check(i.description)) {
+        const hasPropertyMatch = i.properties?.some(p => check(p.key) || check(p.value));
+        if (check(i.name) || check(i.description) || hasPropertyMatch) {
             results.push({ type: 'item', id: i.id, primary: i.name, secondary: i.description });
         }
     });
     projectData.memos.forEach(m => {
-        if (check(m.title) || check(m.content)) {
+        const hasPropertyMatch = m.properties?.some(p => check(p.key) || check(p.value));
+        if (check(m.title) || check(m.content) || hasPropertyMatch) {
             results.push({ type: 'memo', id: m.id, primary: m.title, secondary: m.content });
+        }
+    });
+    projectData.plots.forEach(p => {
+        const hasPropertyMatch = p.properties?.some(p => check(p.key) || check(p.value));
+        if (check(p.title) || check(p.content) || hasPropertyMatch) {
+            results.push({ type: 'plot', id: p.id, primary: p.title, secondary: p.content });
         }
     });
     projectData.tasks.forEach(t => {
@@ -93,9 +173,9 @@ const AppContent: React.FC = () => {
     return results;
   }, [searchQuery, projectData, t, language]);
 
-  const selectedItem: EditableItem = useMemo(() => {
-    if (!selectedInfo || !projectData) return null;
-    const { type, id } = selectedInfo;
+  const activeItem: EditableItem = useMemo(() => {
+    if (!activeInfo || !projectData) return null;
+    const { type, id } = activeInfo;
 
     switch (type) {
         case 'character': {
@@ -114,6 +194,10 @@ const AppContent: React.FC = () => {
             const data = projectData.memos.find(m => m.id === id);
             return data ? { type, data } : null;
         }
+        case 'plot': {
+            const data = projectData.plots.find(p => p.id === id);
+            return data ? { type, data } : null;
+        }
         case 'task': {
             const data = projectData.tasks.find(t => t.id === id);
             return data ? { type, data } : null;
@@ -129,68 +213,102 @@ const AppContent: React.FC = () => {
         default:
             return null;
     }
-  }, [projectData, selectedInfo]);
-
-
-  const handleSelectItem = useCallback((type: DbItemType | 'scene', id: string) => {
-    if (type === 'character') {
-      setMainView('characterGraph');
-    } else if (type === 'location' || type === 'item' || type === 'memo' || type === 'task' || type === 'asset') {
-      setActiveDbTab(type);
-      setMainView('timeline');
-    } else if (type === 'scene') {
-      setMainView('timeline');
-    }
-    setSelectedInfo({ type: type, id });
-  }, []);
+  }, [projectData, activeInfo]);
 
   const handleSearchResultSelect = useCallback((type: DbItemType | 'scene', id: string) => {
-    handleSelectItem(type, id);
+    handleEditItem(type, id);
     setSearchQuery('');
-  }, [handleSelectItem]);
+  }, [handleEditItem]);
 
   const handleUpdateItem = useCallback((item: EditableItem) => {
     if (!item) return;
-    if (item.type === 'character' || item.type === 'location' || item.type === 'item' || item.type === 'memo' || item.type === 'task' || item.type === 'asset') {
-      updateDbItem(item.type, item.data as Character | Location | Item | Memo | Task | Asset);
+    if (item.type === 'character' || item.type === 'location' || item.type === 'item' || item.type === 'memo' || item.type === 'task' || item.type === 'asset' || item.type === 'plot') {
+      updateDbItem(item.type, item.data as Character | Location | Item | Memo | Task | Asset | Plot);
     } else if (item.type === 'scene') {
       updateScene(item.data as Scene);
     }
   }, [updateDbItem, updateScene]);
-
-  const handleDeselect = useCallback(() => {
-    setSelectedInfo(null);
-  }, []);
   
   const handleTabChange = (tab: TabType) => {
     setActiveDbTab(tab);
-     if(selectedInfo && selectedInfo.type !== 'scene' && selectedInfo.type !== 'character' && selectedInfo.type !== tab) {
-        setSelectedInfo(null);
+     if(activeInfo && activeInfo.type !== 'scene' && activeInfo.type !== 'character' && activeInfo.type !== tab) {
+        setActiveInfo(null);
     }
   };
 
   const handleAddScene = () => {
     const newId = addScene();
-    setSelectedInfo({ type: 'scene', id: newId });
+    setActiveInfo({ type: 'scene', id: newId, mode: 'edit' });
   };
   
   const handleAddCharacter = () => {
     const newId = addDbItem('character');
-    setSelectedInfo({ type: 'character', id: newId });
+    setActiveInfo({ type: 'character', id: newId, mode: 'edit' });
   };
   
   const handleAddAsset = async (assetData: Omit<Asset, 'id'>) => {
     const newId = await addAsset(assetData);
-    handleSelectItem('asset', newId);
+    handleEditItem('asset', newId);
   };
 
   const handleResetData = async () => {
       if(window.confirm(t('confirmReset', language))) {
         await resetProjectData();
-        setSelectedInfo(null);
+        setActiveInfo(null);
         setIsSettingsOpen(false);
       }
   };
+
+  const showContextMenu = useCallback((event: React.MouseEvent, items: ContextMenuItem[]) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items,
+    });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleDeleteWithConfirmation = useCallback((type: DbItemType, id: string) => {
+    let itemToDelete: any;
+    let name = t('unnamed', language);
+    if (!projectData) return;
+    switch(type) {
+        case 'character': itemToDelete = projectData.characters.find(i => i.id === id); break;
+        case 'location': itemToDelete = projectData.locations.find(i => i.id === id); break;
+        case 'item': itemToDelete = projectData.items.find(i => i.id === id); break;
+        case 'memo': itemToDelete = projectData.memos.find(i => i.id === id); break;
+        case 'plot': itemToDelete = projectData.plots.find(i => i.id === id); break;
+        case 'task': itemToDelete = projectData.tasks.find(i => i.id === id); break;
+        case 'asset': itemToDelete = projectData.assets.find(i => i.id === id); break;
+    }
+    if (itemToDelete) {
+        name = itemToDelete.name || itemToDelete.title;
+    }
+
+    if (window.confirm(t('confirmDelete', language).replace('{name}', name))) {
+        deleteDbItem(type, id);
+        if (activeInfo?.id === id) {
+            closeSheet();
+        }
+    }
+  }, [projectData, t, language, deleteDbItem, activeInfo, closeSheet]);
+
+  const handleDeleteSceneWithConfirmation = useCallback((id: string) => {
+    const scene = projectData?.scenes.find(s => s.id === id);
+    const name = scene?.title || t('untitledScene', language);
+    if (window.confirm(t('confirmDelete', language).replace('{name}', name))) {
+      deleteScene(id);
+      if (activeInfo?.id === id) {
+        closeSheet();
+      }
+    }
+  }, [projectData?.scenes, t, language, deleteScene, activeInfo, closeSheet]);
+
 
   if (!projectData) {
     return (
@@ -217,12 +335,15 @@ const AppContent: React.FC = () => {
         {isSidebarOpen && (
             <ProjectDB
               projectData={projectData}
-              onSelectItem={handleSelectItem}
+              onEditItem={(type, id) => handleEditItem(type, id)}
+              onViewItem={handleViewItem}
               onAddDbItem={addDbItem}
               onAddAsset={handleAddAsset}
-              selectedItemId={selectedInfo?.id}
+              selectedItemId={activeInfo?.id}
               activeTab={activeDbTab}
               onTabChange={handleTabChange}
+              showContextMenu={showContextMenu}
+              onDeleteItem={handleDeleteWithConfirmation}
             />
         )}
         <div className="flex-1 bg-background overflow-hidden flex flex-col">
@@ -233,46 +354,57 @@ const AppContent: React.FC = () => {
                     </h1>
                     <div className="flex items-center gap-4">
                         {mainView === 'timeline' && (
-                            <Button onClick={handleAddScene} size="sm">
+                            <Button onClick={handleAddScene} size="sm" data-tour-id="add-scene-button">
                                 <PlusIcon className="w-4 h-4 mr-2" />
                                 {t('addScene', language)}
                             </Button>
                         )}
                         {mainView === 'characterGraph' && (
-                            <Button onClick={handleAddCharacter} size="sm">
+                            <Button onClick={handleAddCharacter} size="sm" data-tour-id="add-character-button">
                                 <PlusIcon className="w-4 h-4 mr-2" />
                                 {t('addCharacter', language)}
                             </Button>
                         )}
-                        <ViewSwitcher currentView={mainView} onViewChange={setMainView} />
+                        <div data-tour-id="view-switcher">
+                           <ViewSwitcher currentView={mainView} onViewChange={setMainView} />
+                        </div>
                     </div>
                 </div>
                 {mainView === 'characterGraph' ? (
                   <CharacterGraph 
                     characters={projectData.characters}
                     relationships={projectData.relationships}
-                    onSelectCharacter={(id) => handleSelectItem('character', id)}
-                    selectedCharacterId={selectedInfo?.type === 'character' ? selectedInfo.id : undefined}
+                    onEditCharacter={(id) => handleEditItem('character', id)}
+                    onViewCharacter={(id) => handleViewItem('character', id)}
+                    selectedCharacterId={activeInfo?.type === 'character' ? activeInfo.id : undefined}
+                    showContextMenu={showContextMenu}
+                    onAddCharacter={handleAddCharacter}
+                    onDeleteCharacter={(id) => handleDeleteWithConfirmation('character', id)}
                   />
                 ) : (
                   <Timeline
                     scenes={projectData.scenes}
-                    onSelectScene={(id) => handleSelectItem('scene', id)}
-                    onDeleteScene={deleteScene}
-                    selectedSceneId={selectedInfo?.type === 'scene' ? selectedInfo.id : undefined}
+                    onEditScene={(id) => handleEditItem('scene', id)}
+                    onViewScene={handleViewScene}
+                    onDeleteScene={handleDeleteSceneWithConfirmation}
+                    selectedSceneId={activeInfo?.type === 'scene' ? activeInfo.id : undefined}
+                    showContextMenu={showContextMenu}
+                    onAddScene={handleAddScene}
                   />
                 )}
             </div>
         </div>
       </main>
-      {selectedItem && (
+      {activeItem && (
         <EditorSheet
-            item={selectedItem}
+            item={activeItem}
+            isReadOnly={activeInfo?.mode === 'view'}
             projectData={projectData}
             onUpdate={handleUpdateItem}
-            onClose={handleDeselect}
+            onClose={closeSheet}
             onDeleteItem={deleteDbItem}
             onAddEvent={addSceneEvent}
+            onAddEvents={addSceneEvents}
             onUpdateEvent={updateSceneEvent}
             onDeleteEvent={deleteSceneEvent}
             onAddRelationship={addRelationship}
@@ -285,6 +417,30 @@ const AppContent: React.FC = () => {
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           onResetData={handleResetData}
+          onOpenGuide={handleOpenGuide}
+        />
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          onClose={closeContextMenu}
+        />
+      )}
+      {isGuideOpen && <UserGuide onClose={handleCloseGuide} onStepChange={handleStepChange} />}
+      <button
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary-hover transition-transform transform hover:scale-110 flex items-center justify-center"
+        title={t('aiAssistant', language)}
+      >
+        <ChatIcon className="w-7 h-7" />
+      </button>
+
+      {isChatOpen && (
+        <ChatBot 
+            projectData={projectData}
+            onClose={() => setIsChatOpen(false)}
         />
       )}
     </div>

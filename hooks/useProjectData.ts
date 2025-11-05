@@ -1,15 +1,15 @@
-
 import { useState, useCallback, useEffect } from 'react';
-import { ProjectData, Character, Location, Item, Scene, SceneEvent, DbItemType, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, ChoiceEvent, Choice, Relationship, GoToSceneEvent, Memo, Task, Asset, AssetType } from '../types';
+import { ProjectData, Character, Location, Item, Scene, SceneEvent, DbItemType, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, ChoiceEvent, Choice, Relationship, GoToSceneEvent, Memo, Task, Asset, AssetType, Plot } from '../types';
 import { getProjectDataFromDB, saveProjectDataToDB } from '../utils/db';
 
 export const getInitialData = (): ProjectData => ({
   projectName: "New Visual Novel",
-  characters: [{ id: 'char-1', name: 'Protagonist', description: 'The main character of the story.' }],
-  locations: [{ id: 'loc-1', name: 'Starting Room', description: 'A dimly lit, small room.' }],
-  items: [{ id: 'item-1', name: 'Mysterious Key', description: 'An old key with an intricate design.' }],
+  characters: [{ id: 'char-1', name: 'Protagonist', description: 'The main character of the story.', properties: [] }],
+  locations: [{ id: 'loc-1', name: 'Starting Room', description: 'A dimly lit, small room.', properties: [] }],
+  items: [{ id: 'item-1', name: 'Mysterious Key', description: 'An old key with an intricate design.', properties: [] }],
   memos: [],
   tasks: [],
+  plots: [],
   scenes: [{ 
     id: 'scene-1', 
     title: 'Opening Scene', 
@@ -64,15 +64,18 @@ export const useProjectData = () => {
   }, [updateAndPersistData]);
 
   const addDbItem = useCallback((type: DbItemType) => {
-    let newItem: Character | Location | Item | Memo | Task;
+    let newItem: Character | Location | Item | Memo | Task | Plot;
     const id = `${type.slice(0,4)}-${Date.now()}`;
 
     switch (type) {
         case 'memo':
-            newItem = { id, title: 'New Memo', content: '' };
+            newItem = { id, title: 'New Memo', content: '', properties: [] };
             break;
         case 'task':
             newItem = { id, title: 'New Task', description: '', completed: false };
+            break;
+        case 'plot':
+            newItem = { id, title: 'New Plot', content: '', properties: [] };
             break;
         case 'character':
         case 'location':
@@ -83,6 +86,7 @@ export const useProjectData = () => {
                 id,
                 name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
                 description: '',
+                properties: [],
             };
             break;
     }
@@ -99,6 +103,8 @@ export const useProjectData = () => {
                 return {...prev, memos: [...prev.memos, newItem as Memo]};
             case 'task':
                 return {...prev, tasks: [...prev.tasks, newItem as Task]};
+            case 'plot':
+                return {...prev, plots: [...prev.plots, newItem as Plot]};
             default:
               return prev;
         }
@@ -106,7 +112,7 @@ export const useProjectData = () => {
     return newItem.id;
   }, [updateAndPersistData]);
 
-  const updateDbItem = useCallback((type: DbItemType, updatedItem: Character | Location | Item | Memo | Task | Asset) => {
+  const updateDbItem = useCallback((type: DbItemType, updatedItem: Character | Location | Item | Memo | Task | Asset | Plot) => {
     updateAndPersistData(prev => {
         switch (type) {
             case 'character':
@@ -119,6 +125,8 @@ export const useProjectData = () => {
                 return {...prev, memos: prev.memos.map(m => m.id === updatedItem.id ? updatedItem as Memo : m)};
             case 'task':
                 return {...prev, tasks: prev.tasks.map(t => t.id === updatedItem.id ? updatedItem as Task : t)};
+            case 'plot':
+                return {...prev, plots: prev.plots.map(p => p.id === updatedItem.id ? updatedItem as Plot : p)};
             case 'asset':
                 return {...prev, assets: prev.assets.map(a => a.id === updatedItem.id ? updatedItem as Asset : a)};
             default:
@@ -144,6 +152,8 @@ export const useProjectData = () => {
                 return {...prev, memos: prev.memos.filter(m => m.id !== id)};
             case 'task':
                 return {...prev, tasks: prev.tasks.filter(t => t.id !== id)};
+            case 'plot':
+                return {...prev, plots: prev.plots.filter(p => p.id !== id)};
             case 'asset': {
                 const newScenes = prev.scenes.map(scene => {
                     const newEvents = scene.events.map(event => {
@@ -218,6 +228,18 @@ export const useProjectData = () => {
     }));
   }, [projectData, updateAndPersistData]);
 
+  const addSceneEvents = useCallback((sceneId: string, newEvents: SceneEvent[]) => {
+    updateAndPersistData(prev => ({
+        ...prev,
+        scenes: prev.scenes.map(s => {
+            if (s.id === sceneId) {
+                return {...s, events: [...s.events, ...newEvents]}
+            }
+            return s;
+        })
+    }));
+  }, [updateAndPersistData]);
+
   const updateSceneEvent = useCallback((sceneId: string, updatedEvent: SceneEvent) => {
     updateAndPersistData(prev => ({
         ...prev,
@@ -283,6 +305,7 @@ export const useProjectData = () => {
     updateScene,
     deleteScene,
     addSceneEvent,
+    addSceneEvents,
     updateSceneEvent,
     deleteSceneEvent,
     addRelationship,

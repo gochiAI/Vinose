@@ -44,6 +44,30 @@
         --danger: 185 28 28;
         --danger-hover: 153 27 27;
       }
+
+      .prose { color: rgb(var(--foreground)); }
+      .prose h1, .prose h2, .prose h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; line-height: 1.2; }
+      .prose h1 { font-size: 1.5em; }
+      .prose h2 { font-size: 1.25em; }
+      .prose h3 { font-size: 1.1em; }
+      .prose p { margin-bottom: 1em; }
+      .prose ul, .prose ol { margin-left: 1.5rem; margin-bottom: 1em; }
+      .prose ul { list-style-type: disc; }
+      .prose ol { list-style-type: decimal; }
+      .prose blockquote { border-left: 2px solid rgb(var(--border)); padding-left: 1em; margin: 0 0 1em 0; font-style: italic; color: rgb(var(--muted-foreground)); }
+      .prose code { background-color: rgb(var(--secondary)); padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
+      .prose pre { background-color: rgb(var(--secondary)); padding: 1em; border-radius: 5px; overflow-x: auto; margin-bottom: 1em;}
+      .prose pre code { background-color: transparent; padding: 0; }
+      .prose a { color: rgb(var(--primary)); text-decoration: underline; }
+      .prose-sm { font-size: 0.875rem; line-height: 1.6; }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-fade-in-fast {
+        animation: fadeIn 0.1s ease-out;
+      }
     </style>
     <script>
       tailwind.config = {
@@ -83,6 +107,8 @@
       }
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
   <script type="importmap">
 {
   "imports": {
