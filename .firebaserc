@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "release": "cithare"
+  },
+  "targets": {
+    "cithare": {
+      "hosting": {
+        "main": [
+          "cithare-b0bed"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Visual Novel Scenario Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        --background: 255 255 255;
+        --foreground: 15 23 42;
+        --card: 241 245 249;
+        --card-foreground: 15 23 42;
+        --primary: 88 101 242;
+        --primary-hover: 79 91 218;
+        --primary-foreground: 255 255 255;
+        --secondary: 226 232 240;
+        --secondary-hover: 203 213 225;
+        --secondary-foreground: 15 23 42;
+        --muted: 241 245 249;
+        --muted-foreground: 100 116 139;
+        --border: 203 213 225;
+        --ring: 88 101 242;
+        --danger: 239 68 68;
+        --danger-hover: 220 38 38;
+      }
+ 
+      .dark {
+        --background: 30 31 34;
+        --foreground: 242 243 245;
+        --card: 43 45 49;
+        --card-foreground: 242 243 245;
+        --primary: 88 101 242;
+        --primary-hover: 79 91 218;
+        --primary-foreground: 242 243 245;
+        --secondary: 56 58 64;
+        --secondary-hover: 78 80 88;
+        --secondary-foreground: 242 243 245;
+        --muted: 78 80 88;
+        --muted-foreground: 184 185 191;
+        --border: 78 80 88;
+        --ring: 88 101 242;
+        --danger: 185 28 28;
+        --danger-hover: 153 27 27;
+      }
+
+      .prose { color: rgb(var(--foreground)); }
+      .prose h1, .prose h2, .prose h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; line-height: 1.2; }
+      .prose h1 { font-size: 1.5em; }
+      .prose h2 { font-size: 1.25em; }
+      .prose h3 { font-size: 1.1em; }
+      .prose p { margin-bottom: 1em; }
+      .prose ul, .prose ol { margin-left: 1.5rem; margin-bottom: 1em; }
+      .prose ul { list-style-type: disc; }
+      .prose ol { list-style-type: decimal; }
+      .prose blockquote { border-left: 2px solid rgb(var(--border)); padding-left: 1em; margin: 0 0 1em 0; font-style: italic; color: rgb(var(--muted-foreground)); }
+      .prose code { background-color: rgb(var(--secondary)); padding: 0.2em 0.4em; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
+      .prose pre { background-color: rgb(var(--secondary)); padding: 1em; border-radius: 5px; overflow-x: auto; margin-bottom: 1em;}
+      .prose pre code { background-color: transparent; padding: 0; }
+      .prose a { color: rgb(var(--primary)); text-decoration: underline; }
+      .prose-sm { font-size: 0.875rem; line-height: 1.6; }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      .animate-fade-in-fast {
+        animation: fadeIn 0.1s ease-out;
+      }
+      .dragging-no-select {
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        cursor: grabbing !important;
+      }
+      .dragging-no-select * {
+        pointer-events: none;
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              border: 'rgb(var(--border) / <alpha-value>)',
+              ring: 'rgb(var(--ring) / <alpha-value>)',
+              background: 'rgb(var(--background) / <alpha-value>)',
+              foreground: 'rgb(var(--foreground) / <alpha-value>)',
+              primary: {
+                DEFAULT: 'rgb(var(--primary) / <alpha-value>)',
+                hover: 'rgb(var(--primary-hover) / <alpha-value>)',
+                foreground: 'rgb(var(--primary-foreground) / <alpha-value>)',
+              },
+              secondary: {
+                DEFAULT: 'rgb(var(--secondary) / <alpha-value>)',
+                hover: 'rgb(var(--secondary-hover) / <alpha-value>)',
+                foreground: 'rgb(var(--secondary-foreground) / <alpha-value>)',
+              },
+              card: {
+                DEFAULT: 'rgb(var(--card) / <alpha-value>)',
+                foreground: 'rgb(var(--card-foreground) / <alpha-value>)',
+              },
+              muted: {
+                DEFAULT: 'rgb(var(--muted) / <alpha-value>)',
+                foreground: 'rgb(var(--muted-foreground) / <alpha-value>)',
+              },
+              danger: {
+                DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
+                hover: 'rgb(var(--danger-hover) / <alpha-value>)',
+              }
+            },
+          },
+        },
+      }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.27.0",
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

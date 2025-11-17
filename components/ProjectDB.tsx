@@ -1,0 +1,262 @@
+
+import React, { useRef, useState } from 'react';
+import { ProjectData, DbItemType, AssetType, Asset } from '../types';
+import { PlusIcon } from './icons/PlusIcon';
+import { LocationIcon } from './icons/LocationIcon';
+import { ItemIcon } from './icons/ItemIcon';
+import { useSettings } from '../contexts/SettingsContext';
+import { MemoIcon } from './icons/MemoIcon';
+import { TaskIcon } from './icons/TaskIcon';
+import { ImageIcon } from './icons/ImageIcon';
+import { Button } from './ui/Button';
+import { ContextMenuItem } from './ui/ContextMenu';
+import { PlotIcon } from './icons/PlotIcon';
+import { Input } from './ui/Input';
+import { VariableIcon } from './icons/VariableIcon';
+import { GroupIcon } from './icons/GroupIcon';
+import { CloseIcon } from './icons/CloseIcon';
+
+type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot' | 'variable' | 'group';
+
+interface ProjectDBProps {
+  projectData: ProjectData;
+  onEditItem: (type: DbItemType, id: string) => void;
+  onViewItem: (type: DbItemType, id: string) => void;
+  onAddDbItem: (type: Exclude<TabType, 'asset'>) => string;
+  onAddAsset: (asset: Omit<Asset, 'id'>) => void;
+  selectedItemId?: string;
+  activeTab: TabType;
+  onTabChange: (tab: TabType) => void;
+  showContextMenu: (event: React.MouseEvent, items: ContextMenuItem[]) => void;
+  onDeleteItem: (type: DbItemType, id: string) => void;
+  isOpen: boolean;
+  onCloseSidebar: () => void;
+}
+
+
+export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onEditItem, onViewItem, onAddDbItem, onAddAsset, selectedItemId, activeTab, onTabChange, showContextMenu, onDeleteItem, isOpen, onCloseSidebar }) => {
+    const { t, language } = useSettings();
+    const [assetTypeToUpload, setAssetTypeToUpload] = useState<AssetType>(AssetType.BACKGROUND);
+    const [newAssetName, setNewAssetName] = useState('');
+    const [newAssetType, setNewAssetType] = useState<AssetType>(AssetType.BACKGROUND);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const TABS: { type: TabType, label: string, icon: React.FC<{className?: string}> }[] = [
+        { type: 'plot', label: t('plots', language), icon: PlotIcon },
+        { type: 'group', label: t('groups', language), icon: GroupIcon },
+        { type: 'location', label: t('locations', language), icon: LocationIcon },
+        { type: 'item', label: t('items', language), icon: ItemIcon },
+        { type: 'variable', label: t('variables', language), icon: VariableIcon },
+        { type: 'task', label: t('tasks', language), icon: TaskIcon },
+        { type: 'asset', label: t('assets', language), icon: ImageIcon },
+        { type: 'memo', label: t('memos', language), icon: MemoIcon },
+    ];
+
+    const handleAddItem = (type: Exclude<TabType, 'asset'>) => {
+        const newId = onAddDbItem(type);
+        onEditItem(type, newId);
+    };
+
+    const handleFileUploadClick = () => {
+        fileInputRef.current?.click();
+    };
+    
+    const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+    
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target?.result as string;
+            onAddAsset({
+                name: file.name.split('.').slice(0, -1).join('.'), // remove extension
+                type: assetTypeToUpload,
+                data: dataUrl,
+                mimeType: file.type,
+            });
+        };
+        reader.readAsDataURL(file);
+        event.target.value = ''; // Reset file input
+    };
+
+    const handleAddPlaceholderAsset = () => {
+        if (!newAssetName.trim()) {
+            alert('Please enter a name for the asset.');
+            return;
+        }
+        onAddAsset({
+            name: newAssetName.trim(),
+            type: newAssetType,
+            data: '',
+            mimeType: '',
+        });
+        setNewAssetName('');
+    };
+
+
+    const renderContent = () => {
+        if (activeTab === 'asset') {
+            const assetTypes = Object.values(AssetType);
+            return (
+                <div className="mt-2">
+                    <div className="p-2 space-y-2 border-b border-border mb-2">
+                        <h4 className="font-semibold text-sm text-muted-foreground select-none">{t('createAssetPlaceholder', language)}</h4>
+                        <Input
+                          placeholder={t('assetName', language)}
+                          value={newAssetName}
+                          onChange={(e) => setNewAssetName(e.target.value)}
+                          className="text-sm"
+                        />
+                        <select
+                            value={newAssetType}
+                            onChange={(e) => setNewAssetType(e.target.value as AssetType)}
+                            className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:ring-2 focus:ring-ring focus:border-ring outline-none text-sm"
+                        >
+                            {Object.values(AssetType).map(type => (
+                                <option key={type} value={type}>{t(type.toLowerCase() as any, language)}</option>
+                            ))}
+                        </select>
+                        <Button variant="secondary" size="sm" onClick={handleAddPlaceholderAsset} className="w-full">{t('create', language)}</Button>
+                    </div>
+
+                    <div className="p-2 space-y-2 border-b border-border mb-2">
+                        <h4 className="font-semibold text-sm text-muted-foreground select-none">{t('upload', language)}</h4>
+                        <select
+                            value={assetTypeToUpload}
+                            onChange={(e) => setAssetTypeToUpload(e.target.value as AssetType)}
+                            className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:ring-2 focus:ring-ring focus:border-ring outline-none text-sm"
+                        >
+                            {assetTypes.map(type => (
+                                // FIX: Cast type to 'any' to satisfy TranslationKey type for `t` function.
+                                <option key={type} value={type}>{t(type.toLowerCase() as any, language)}</option>
+                            ))}
+                        </select>
+                        <Button variant="secondary" size="sm" onClick={handleFileUploadClick} className="w-full">{t('upload', language)}...</Button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileSelected}
+                            className="hidden"
+                            accept={assetTypeToUpload === AssetType.SFX ? 'audio/*' : 'image/*'}
+                        />
+                    </div>
+                    {assetTypes.map(type => {
+                        const assetsOfType = projectData.assets.filter(a => a.type === type);
+                        if(assetsOfType.length === 0) return null;
+                        
+                        return (
+                            <div key={type} className="mb-4">
+                                {/* FIX: Cast type to 'any' to satisfy TranslationKey type for `t` function. */}
+                                <h3 className="font-bold text-foreground select-none px-2 mb-1">{t(type.toLowerCase() as any, language)}</h3>
+                                <ul className="space-y-1">
+                                    {assetsOfType.map(asset => (
+                                        <li key={asset.id}>
+                                            <a
+                                                href="#"
+                                                onClick={(e) => { e.preventDefault(); onEditItem('asset', asset.id); }}
+                                                onContextMenu={(e) => {
+                                                  showContextMenu(e, [
+                                                      { label: `${t('view', language)} ${t('asset', language)}`, onClick: () => onViewItem('asset', asset.id) },
+                                                      { label: `${t('edit', language)} ${t('asset', language)}`, onClick: () => onEditItem('asset', asset.id) },
+                                                      { isSeparator: true },
+                                                      { label: `${t('delete', language)} ${t('asset', language)}`, onClick: () => onDeleteItem('asset', asset.id), isDanger: true }
+                                                  ]);
+                                                }}
+                                                className={`block p-2 text-sm rounded-md truncate ${selectedItemId === asset.id ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-secondary-foreground'}`}
+                                            >
+                                                {/* FIX: Cast type to 'any' to satisfy TranslationKey type for `t` function. */}
+                                                {asset.name || `${t('unnamed', language)} ${t(type.toLowerCase() as any, language)}`}
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )
+                    })}
+                </div>
+            )
+        }
+
+        const dataMap = {
+            location: { items: projectData.locations, nameKey: 'name' as const },
+            item: { items: projectData.items, nameKey: 'name' as const },
+            memo: { items: projectData.memos, nameKey: 'title' as const },
+            task: { items: projectData.tasks, nameKey: 'title' as const },
+            plot: { items: projectData.plots, nameKey: 'title' as const },
+            variable: { items: projectData.variables, nameKey: 'name' as const },
+            group: { items: projectData.groups, nameKey: 'title' as const },
+        };
+        
+        const { items, nameKey } = dataMap[activeTab];
+        const currentTab = TABS.find(t => t.type === activeTab)!;
+        
+        return (
+            <div className="mt-2">
+                 <div className="flex justify-between items-center px-2 mb-2">
+                    <h3 className="font-bold text-foreground select-none">{currentTab.label}</h3>
+                    <button 
+                        onClick={() => handleAddItem(activeTab as Exclude<TabType, 'asset'>)}
+                        className="p-1 rounded-full hover:bg-border"
+                        title={`${t('addNew', language)} ${t(activeTab, language)}`}
+                    >
+                        <PlusIcon className="w-4 h-4" />
+                    </button>
+                </div>
+                <ul className="space-y-1">
+                    {items.map(item => (
+                        <li key={item.id}>
+                            <a
+                                href="#"
+                                onClick={(e) => { e.preventDefault(); onEditItem(activeTab, item.id); }}
+                                onContextMenu={(e) => {
+                                    showContextMenu(e, [
+                                        { label: `${t('view', language)} ${t(activeTab, language)}`, onClick: () => onViewItem(activeTab, item.id) },
+                                        { label: `${t('edit', language)} ${t(activeTab, language)}`, onClick: () => onEditItem(activeTab, item.id) },
+                                        { isSeparator: true },
+                                        { label: `${t('delete', language)} ${t(activeTab, language)}`, onClick: () => onDeleteItem(activeTab, item.id), isDanger: true }
+                                    ]);
+                                }}
+                                className={`block p-2 text-sm rounded-md truncate ${selectedItemId === item.id && (item.id.startsWith(activeTab.slice(0,4))) ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary hover:text-secondary-foreground'}`}
+                            >
+                                {item[nameKey] || `${t('unnamed', language)} ${t(activeTab, language)}`}
+                            </a>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        );
+    };
+
+  return (
+    <aside className={`fixed md:relative z-20 h-full w-[90vw] max-w-sm md:w-64 bg-card p-2 border-r border-border flex-shrink-0 flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`} data-tour-id="sidebar">
+       <div className="flex justify-between items-center flex-shrink-0">
+          <h2 className="text-lg font-semibold p-2 select-none">{t('projectDB', language)}</h2>
+          <button onClick={onCloseSidebar} className="md:hidden p-2 rounded-full hover:bg-secondary">
+            <CloseIcon className="w-6 h-6" />
+          </button>
+       </div>
+      <div className="border-b border-border pb-2">
+          <nav className="grid grid-cols-2 gap-2">
+              {TABS.map(tab => (
+                  <button
+                    key={tab.type}
+                    onClick={() => onTabChange(tab.type)}
+                    title={tab.label}
+                    className={`flex items-center justify-start gap-2 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                        activeTab === tab.type
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                      <tab.icon className="w-4 h-4 flex-shrink-0" />
+                      <span>{tab.label}</span>
+                  </button>
+              ))}
+          </nav>
+      </div>
+      <div className="overflow-y-auto">
+        {renderContent()}
+      </div>
+    </aside>
+  );
+};
