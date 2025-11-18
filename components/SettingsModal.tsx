@@ -133,7 +133,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                             </div>
                         </div>
                         {/* Right Column */}
-                        <div className="space-y-2">
+                        <div className="hidden md:block space-y-2">
                             <KeymapEditor />
                         </div>
                     </div>

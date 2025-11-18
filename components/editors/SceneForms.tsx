@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ProjectData, EditableItem, Scene, SceneEvent, EventType, AssetType, BranchMode } from '../../types';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -157,8 +156,41 @@ Convert the description into commands now:
 
     return (
         <div className="flex flex-col h-full">
-            <div className="flex-1 flex flex-col md:flex-row p-4 space-y-4 md:space-y-0 md:space-x-4 overflow-hidden">
-                <div className="flex-1 space-y-4 flex flex-col" data-tour-id="scene-editor-main-panel">
+            {/* モバイル: コマンドモードを上部に配置 */}
+            <div className={`md:hidden border-b border-border ${isCommandModeVisible ? 'block' : 'hidden'}`} style={{ height: '90vh' }}>
+                <div className="h-full flex flex-col p-4">
+                    <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                            <h4 className="text-md font-semibold text-muted-foreground">{t('commandMode', language)}</h4>
+                            <button
+                                onClick={() => setIsAiOpen(true)}
+                                className="text-primary hover:text-primary-hover"
+                                title={t('aiAssistant', language)}
+                            >
+                                <SparklesIcon className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setIsCommandModeVisible(false)}>
+                            {t('close', language)}
+                        </Button>
+                    </div>
+                    <div className="flex-1 flex flex-col space-y-2 min-h-0">
+                        <Textarea 
+                            value={commandInput}
+                            onChange={(e) => setCommandInput(e.target.value)}
+                            rows={20}
+                            placeholder={t('commandModePlaceholder', language)}
+                            className="font-mono text-sm flex-1 min-h-0"
+                        />
+                        <Button onClick={handleCommandParseAndAdd} className="w-full flex-shrink-0">
+                            {t('addFromText', language)}
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex-1 flex flex-col md:flex-row p-4 space-y-4 md:space-y-0 md:space-x-4 overflow-hidden min-h-0">
+                <div className="flex-1 space-y-4 flex flex-col min-h-0" data-tour-id="scene-editor-main-panel">
                     <div className="space-y-2">
                         <Input
                             label={t('sceneTitle', language)}
@@ -194,7 +226,7 @@ Convert the description into commands now:
                             </div>
                         </div>
                     </div>
-                    <div className="flex-1 pt-4 border-t border-border overflow-y-auto pr-2 -mr-2">
+                    <div className="flex-1 pt-4 border-t border-border overflow-y-auto pr-2 -mr-2 min-h-0">
                         <div className="space-y-1">
                             <AddEventControl index={0} sceneId={scene.id} onAddEvent={onAddEvent} />
                             {scene.events.map((event, index) => (
@@ -223,12 +255,13 @@ Convert the description into commands now:
                         )}
                     </div>
                      <div className="md:hidden mt-2">
-                        <Button variant="secondary" onClick={() => setIsCommandModeVisible(v => !v)} className="w-full">
+                        <Button variant="secondary" onClick={() => setIsCommandModeVisible(true)} className="w-full">
                             {t('commandMode', language)}
                         </Button>
                     </div>
                 </div>
-                <div className={`flex-col overflow-y-auto md:flex-1 md:border-l md:border-border md:pl-4 ${isCommandModeVisible ? 'flex' : 'hidden md:flex'}`}>
+                {/* デスクトップ: 右サイドパネルとして表示 */}
+                <div className="hidden md:flex md:flex-col overflow-y-auto md:flex-1 md:border-l md:border-border md:pl-4">
                     <div className="flex items-center gap-2 mb-2">
                         <h4 className="text-md font-semibold text-muted-foreground">{t('commandMode', language)}</h4>
                         <button

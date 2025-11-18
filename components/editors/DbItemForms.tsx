@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ProjectData, EditableItem, DbItemType, Character, Location, Item, Memo, Task, Plot, Variable, Group, VariableType } from '../../types';
 import { useSettings } from '../../contexts/SettingsContext';
 import { Input } from '../ui/Input';
@@ -41,6 +41,12 @@ export const DbItemEditor: React.FC<DbItemEditorProps> = ({ item, projectData, o
     const [isAiOpen, setIsAiOpen] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiResult, setAiResult] = useState('');
+
+    // Define content before useEffect
+    const hasContent = item.type === 'memo' || item.type === 'plot';
+    const content = item.type === 'variable' || item.type === 'group' 
+        ? '' 
+        : hasContent ? item.data.content : item.data.description;
 
     if (item.type === 'variable') {
         const variable = item.data;
@@ -155,8 +161,6 @@ export const DbItemEditor: React.FC<DbItemEditorProps> = ({ item, projectData, o
         }
     };
     
-    const hasContent = item.type === 'memo' || item.type === 'plot';
-    const content = hasContent ? item.data.content : item.data.description;
     const label = hasContent ? t('content', language) : t('description', language);
 
     const handleContentChange = (value: string) => {
@@ -211,7 +215,7 @@ User Request: ${aiPrompt}
 
     return (
         <div className="flex h-full p-4 space-x-4">
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-4 overflow-y-auto">
                 <Input
                     label={hasTitle ? t('title', language) : t('name', language)}
                     value={title}
@@ -273,7 +277,7 @@ User Request: ${aiPrompt}
                     {editMode === 'write' ? (
                         <Textarea
                             value={content}
-                            rows={5}
+                            rows={20}
                             onChange={(e) => handleContentChange(e.target.value)}
                         />
                     ) : (

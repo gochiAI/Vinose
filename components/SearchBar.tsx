@@ -60,12 +60,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({ query, onQueryChange, resu
                     onChange={(e) => onQueryChange(e.target.value)}
                     onFocus={() => setIsFocused(true)}
                     className="w-full bg-secondary border border-transparent rounded-md pl-10 pr-4 py-2 text-foreground placeholder-muted-foreground focus:ring-2 focus:ring-ring focus:border-ring outline-none"
+                    autoFocus
                 />
             </div>
             {showResults && (
                 <div className="absolute top-full mt-2 w-full bg-card rounded-lg shadow-lg border border-border max-h-96 overflow-y-auto z-50">
                     {results.length > 0 ? (
-                        // FIX: Use Object.keys to avoid type inference issues with Object.entries.
                         Object.keys(groupedResults).map((type) => (
                             <div key={type}>
                                 <h4 className="text-xs font-bold uppercase text-muted-foreground px-3 pt-3 pb-1">
@@ -75,7 +75,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({ query, onQueryChange, resu
                                     {groupedResults[type].map(item => (
                                         <li key={item.id}>
                                             <button
-                                                onClick={() => onResultSelect(item.type, item.id)}
+                                                onClick={() => {
+                                                    onResultSelect(item.type, item.id);
+                                                    setIsFocused(false);
+                                                }}
                                                 className="w-full text-left px-3 py-2 hover:bg-secondary flex flex-col"
                                             >
                                                 <span className="font-semibold text-foreground text-sm">{item.primary}</span>

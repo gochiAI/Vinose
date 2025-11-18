@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { Character, Relationship } from '../types';
 import { MinusIcon } from './icons/MinusIcon';
@@ -66,6 +65,7 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
   const [isMinimapOpen, setIsMinimapOpen] = useState(true);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const lastTouchDistance = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { t, language } = useSettings();
 
@@ -83,7 +83,9 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
     resizeObserver.observe(container);
     setViewportSize({ width: container.clientWidth, height: container.clientHeight });
 
-    return () => resizeObserver.disconnect();
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, []);
   
   const { nodePositions, edges, contentSize } = useMemo(() => {
@@ -143,8 +145,67 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
     lastMousePos.current = { x: e.clientX, y: e.clientY };
   }, [isPanning]);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('.scene-node')) return;
+    
+    e.stopPropagation();
+    
+    if (e.touches.length === 1) {
+      setIsPanning(true);
+      lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+      const distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      lastTouchDistance.current = distance;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
+    
+    if (e.touches.length === 1 && isPanning) {
+      const dx = e.touches[0].clientX - lastMousePos.current.x;
+      const dy = e.touches[0].clientY - lastMousePos.current.y;
+      setViewTransform(prev => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
+      lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2 && lastTouchDistance.current !== null) {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const newDistance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      
+      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      const rect = container.getBoundingClientRect();
+      const localX = centerX - rect.left;
+      const localY = centerY - rect.top;
+
+      const scaleFactor = newDistance / lastTouchDistance.current;
+      const newScale = viewTransform.scale * scaleFactor;
+      const clampedScale = Math.max(MIN_ZOOM, Math.min(newScale, MAX_ZOOM));
+
+      const worldX = (localX - viewTransform.x) / viewTransform.scale;
+      const worldY = (localY - viewTransform.y) / viewTransform.scale;
+
+      const newX = localX - worldX * clampedScale;
+      const newY = localY - worldY * clampedScale;
+
+      setViewTransform({ x: newX, y: newY, scale: clampedScale });
+      lastTouchDistance.current = newDistance;
+    }
+  }, [isPanning, viewTransform]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsPanning(false);
+    lastTouchDistance.current = null;
+  }, []);
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
     const container = containerRef.current;
     if (!container) return;
 
@@ -277,14 +338,18 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
     <div className="flex-1 relative" data-tour-id="character-graph-view">
         <div 
             ref={containerRef}
-            className="w-full h-full bg-background border-2 border-dashed border-border rounded-lg overflow-hidden relative cursor-grab focus:outline-none"
+            className="w-full h-full bg-background border-2 border-dashed border-border rounded-lg overflow-hidden relative cursor-grab focus:outline-none touch-none overscroll-none"
             onMouseDown={handleMouseDown}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onMouseMove={handleMouseMove}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             onWheel={handleWheel}
             onContextMenu={handleContainerContextMenu}
             tabIndex={0}
+            style={{ touchAction: 'none' }}
         >
             <div
                 className="absolute"
