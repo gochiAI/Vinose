@@ -427,13 +427,17 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const toggleSidebar = () => {
+    setIsSidebarOpen(prev => !prev);
+  };
+
   return (
     <div className="flex flex-col h-screen font-sans bg-background text-foreground">
-      <Header 
-        projectData={projectData} 
-        setData={setData} 
+      <Header
+        projectData={projectData}
+        setData={setData}
         updateProjectName={updateProjectName}
-        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onToggleSidebar={toggleSidebar}
         onOpenSettings={() => setIsSettingsOpen(true)}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
@@ -442,20 +446,22 @@ const AppContent: React.FC = () => {
        />
       <main className="flex flex-1 overflow-hidden">
         {isSidebarOpen && <div onClick={() => setIsSidebarOpen(false)} className="md:hidden fixed inset-0 bg-black/50 z-10 transition-opacity" />}
-        <ProjectDB
-          projectData={projectData}
-          onEditItem={(type, id) => handleEditItem(type, id)}
-          onViewItem={handleViewItem}
-          onAddDbItem={addDbItem}
-          onAddAsset={handleAddAsset}
-          selectedItemId={activeInfo?.id}
-          activeTab={activeDbTab}
-          onTabChange={handleTabChange}
-          showContextMenu={showContextMenu}
-          onDeleteItem={handleDeleteWithConfirmation}
-          isOpen={isSidebarOpen}
-          onCloseSidebar={() => setIsSidebarOpen(false)}
-        />
+        {isSidebarOpen && (
+          <ProjectDB
+            projectData={projectData}
+            onEditItem={(type, id) => handleEditItem(type, id)}
+            onViewItem={handleViewItem}
+            onAddDbItem={addDbItem}
+            onAddAsset={handleAddAsset}
+            selectedItemId={activeInfo?.id}
+            activeTab={activeDbTab}
+            onTabChange={handleTabChange}
+            showContextMenu={showContextMenu}
+            onDeleteItem={handleDeleteWithConfirmation}
+            isOpen={isSidebarOpen}
+            onCloseSidebar={() => setIsSidebarOpen(false)}
+          />
+        )}
         <div className="flex-1 bg-background overflow-hidden flex flex-col">
             <div className="flex-1 p-4 overflow-hidden flex flex-col">
                 <div className="flex justify-between items-center mb-4 flex-shrink-0">
