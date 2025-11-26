@@ -12,7 +12,6 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [react(), VitePWA()],
       define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.FIREBASE_CONFIG': JSON.stringify(env.FIREBASE_CONFIG),
       },
       resolve: {

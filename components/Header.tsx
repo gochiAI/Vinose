@@ -7,6 +7,8 @@ import { useSettings } from '../contexts/SettingsContext';
 import { SearchBar, SearchResult } from './SearchBar';
 import { useAuth } from '../contexts/AuthContext';
 import { SearchIcon } from './icons/SearchIcon';
+import { useProjectData } from '../hooks/useProjectData';
+import VersionControl from './VersionControl';
 
 
 declare const pako: any;
@@ -37,8 +39,10 @@ export const Header: React.FC<HeaderProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { t, language } = useSettings();
   const { user, signInWithGoogle, signOutUser, isFirebaseAvailable } = useAuth();
+  const { currentBranch } = useProjectData();
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isIOModalOpen, setIsIOModalOpen] = useState(false);
+  const [isVersionControlOpen, setIsVersionControlOpen] = useState(false);
 
   const handleExport = () => {
     try {
@@ -164,81 +168,59 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       )}
-      <header className="flex items-center justify-around p-2 bg-card border-b border-border shadow-md h-16 flex-shrink-0">
-        <div className="flex items-center gap-2 w-1/3">
-          <button onClick={onToggleSidebar} className="p-2 rounded-md hover:bg-secondary text-muted-foreground" title={t('toggleSidebar', language)}>
-              <HamburgerIcon className="w-6 h-6" />
+      {isVersionControlOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsVersionControlOpen(false)}>
+          <div className="bg-card rounded-lg shadow-xl border border-border m-4 max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-4 border-b border-border">
+              <h2 className="text-lg font-bold">Version Control</h2>
+              <button 
+                onClick={() => setIsVersionControlOpen(false)}
+                className="p-1 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <VersionControl />
+            </div>
+          </div>
+        </div>
+      )}
+      <header className="flex items-center justify-between p-2 bg-card border-b border-border shadow-md h-12 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <button onClick={onToggleSidebar} className="p-2 rounded-md hover:bg-secondary text-muted-foreground">
+            <HamburgerIcon className="w-6 h-6" />
           </button>
           <input
-              type="text"
-              value={projectData.projectName}
-              onChange={(e) => updateProjectName(e.target.value)}
-              className="text-lg font-bold bg-transparent border-none text-foreground focus:outline-none focus:ring-0 w-full"
-              data-tour-id="project-name"
+            type="text"
+            value={projectData.projectName}
+            onChange={(e) => updateProjectName(e.target.value)}
+            className="text-lg font-bold bg-transparent border-none text-foreground focus:outline-none focus:ring-0 w-full"
           />
         </div>
-        <div className="hidden md:flex flex-1 justify-center px-4" data-tour-id="search-bar">
-          <SearchBar 
-              query={searchQuery}
-              onQueryChange={onSearchQueryChange}
-              results={searchResults}
-              onResultSelect={onSearchResultSelect}
-          />
-        </div>
-        <button
-          onClick={() => setIsMobileSearchOpen(true)}
-          className="md:hidden p-2 rounded-md hover:bg-secondary text-muted-foreground"
-        >
-          <SearchIcon className="w-6 h-6" />
-        </button>
-        <div className="flex items-center justify-end gap-2">
-          <div className="hidden md:flex items-center gap-2" data-tour-id="io-buttons">
-            <Button variant="secondary" size="sm" onClick={handleImportClick} title={t('importProject', language)}>
-              {t('import', language)}...
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleExport} title={t('exportProject', language)}>
-              {t('export', language)} .vns
-            </Button>
+        <div className="flex items-center gap-2">
+          <div className="hidden md:block text-sm text-muted-foreground px-2">
+            Branch: {currentBranch}
           </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setIsVersionControlOpen(true)}
+          >
+            version
+          </Button>
           <Button 
             variant="secondary" 
             size="sm" 
             onClick={() => setIsIOModalOpen(true)}
-            className="md:hidden"
           >
             I/O
           </Button>
-          <div className="w-px h-8 bg-border mx-2"></div>
-           <button onClick={onOpenSettings} className="p-2 rounded-md hover:bg-secondary text-muted-foreground" title={t('settings', language)} data-tour-id="settings-button">
-              <GearIcon className="w-6 h-6" />
+          <button onClick={onOpenSettings} className="p-2 rounded-md hover:bg-secondary text-muted-foreground">
+            <GearIcon className="w-6 h-6" />
           </button>
-          {isFirebaseAvailable && (
-              user ? (
-                  <div className="group relative">
-                      <img src={user.photoURL || undefined} alt="User" className="w-8 h-8 rounded-full cursor-pointer" />
-                      <div className="absolute top-full right-0 mt-2 w-48 bg-card border border-border rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto z-10">
-                          <div className="p-2 border-b border-border">
-                              <p className="text-sm font-semibold truncate">{user.displayName}</p>
-                              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                          </div>
-                          <button onClick={signOutUser} className="w-full text-left px-3 py-2 text-sm text-foreground hover:bg-secondary">
-                              {t('logout', language)}
-                          </button>
-                      </div>
-                  </div>
-              ) : (
-                  <Button variant="secondary" size="sm" onClick={signInWithGoogle}>
-                      {t('login', language)}
-                  </Button>
-              )
-          )}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".vns,application/json"
-            className="hidden"
-          />
         </div>
       </header>
     </>

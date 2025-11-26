@@ -224,6 +224,12 @@ export type EditableItem =
 
 export type DbItemType = 'character' | 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot' | 'variable' | 'group';
 
+export interface BranchInfo {
+  name: string;
+  createdAt: any; // Firestore Timestamp
+  lastModified: any; // Firestore Timestamp
+}
+
 export type ShortcutAction =
   | 'NEW_SCENE'
   | 'NEW_CHARACTER'
