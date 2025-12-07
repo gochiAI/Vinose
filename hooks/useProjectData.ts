@@ -65,31 +65,50 @@ const ensureDataCompleteness = (data: Partial<ProjectData>): ProjectData => {
 export const useProjectData = () => {
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
   const [currentBranch, setCurrentBranch] = useState<string>('draft');
+  const [detachedHead, setDetachedHead] = useState<string | null>(null); // チェックアウトしたコミットID
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // ローカルとFirestoreの差分
   const { user, loading: authLoading } = useAuth();
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef(false); // 保存中の状態を管理
+  const lastFirestoreData = useRef<ProjectData | null>(null); // 最後にFirestoreから取得したデータ
+  const isLocalUpdateRef = useRef(false); // ローカル更新による保存かどうか
 
   // デバウンス付きの保存処理
   const debouncedSaveToFirestore = useCallback(
     debounce(async (data: ProjectData, branch: string) => {
       if (!user || !firebaseApp) return;
 
+      // 最後に保存したデータと同じ場合はスキップ
+      if (lastFirestoreData.current && JSON.stringify(lastFirestoreData.current) === JSON.stringify(data)) {
+        console.log('Data unchanged, skipping Firestore write');
+        return;
+      }
+
       const db = getFirestore(firebaseApp);
       const branchRef = doc(db, 'projects', user.uid, 'branches', branch, 'data', 'current');
 
       try {
         isSavingRef.current = true; // 保存中フラグを設定
-        await setDoc(branchRef, data);
+        isLocalUpdateRef.current = true; // ローカル更新フラグ
+        await setDoc(branchRef, data, { merge: false }); // merge: false で完全上書き
         // ブランチのlastModifiedを更新
         const branchMetaRef = doc(db, 'projects', user.uid, 'branches', branch);
         await updateDoc(branchMetaRef, { lastModified: serverTimestamp() });
+        lastFirestoreData.current = data; // 保存したデータを記録
+        setHasUnsavedChanges(false); // 保存完了したので差分なし
+        
+        // フラグを遅延リセット（onSnapshotが発火する前にフラグを保持）
+        setTimeout(() => {
+          isLocalUpdateRef.current = false;
+        }, 1000);
+        
         console.log(`Branch '${branch}' saved to Firestore`);
       } catch (error) {
         console.error('Error saving branch to Firestore:', error);
       } finally {
         isSavingRef.current = false; // 保存中フラグを解除
       }
-    }, 2000), // デバウンス時間を 2 秒に設定
+    }, 3000, { maxWait: 5000 }), // デバウンス時間を 3 秒、最大待機 5 秒に設定
     [user]
   );
 
@@ -118,9 +137,24 @@ export const useProjectData = () => {
         const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
         
         unsubscribe = onSnapshot(branchDataRef, async (docSnap) => {
+            // 自分の保存による更新はスキップ
+            if (isLocalUpdateRef.current || isSavingRef.current) {
+                console.log('Skipping onSnapshot: local update in progress');
+                return;
+            }
+            
             if (docSnap.exists()) {
                 const cloudData = ensureDataCompleteness(docSnap.data() as Partial<ProjectData>);
+                
+                // データが同じ場合はスキップ
+                if (lastFirestoreData.current && JSON.stringify(lastFirestoreData.current) === JSON.stringify(cloudData)) {
+                    console.log('Skipping onSnapshot: data unchanged');
+                    return;
+                }
+                
+                lastFirestoreData.current = cloudData; // Firestoreデータを記録
                 setProjectData(cloudData);
+                setHasUnsavedChanges(false); // Firestoreと同期したので差分なし
                 saveProjectDataToDB(cloudData);
             } else {
                 // ブランチが存在しない場合は作成
@@ -158,19 +192,17 @@ export const useProjectData = () => {
         if (saveTimerRef.current) {
             clearTimeout(saveTimerRef.current);
         }
+        // デバウンス中の保存をキャンセル
+        debouncedSaveToFirestore.cancel();
     };
   }, [user, authLoading, currentBranch]);
 
   // タブ閉じ時の保存処理を追加
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (projectData && user && firebaseApp && saveTimerRef.current) {
-        // 保留中の保存を即座に実行
-        clearTimeout(saveTimerRef.current);
-        const db = getFirestore(firebaseApp);
-        const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
-        // 同期的に保存（非推奨だが、タブ閉じ時は他に方法がない）
-        setDoc(branchDataRef, projectData).catch(e => console.error("Emergency save error:", e));
+      if (projectData && user && firebaseApp) {
+        // デバウンス中の保存を即座に実行
+        debouncedSaveToFirestore.flush();
       }
     };
 
@@ -189,6 +221,9 @@ export const useProjectData = () => {
 
         // Firestore に保存（デバウンス処理）
         debouncedSaveToFirestore(newData, currentBranch);
+        
+        // ローカルに変更があることを記録
+        setHasUnsavedChanges(true);
 
         return newData;
       });
@@ -211,17 +246,27 @@ export const useProjectData = () => {
 
     const db = getFirestore(firebaseApp);
     const versionsRef = collection(db, 'projects', user.uid, 'versions');
-    // 現在ブランチの直近のコミットIDを取得
-    const latestQ = query(versionsRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(latestQ);
+    
     let parentId: string | null = null;
-    for (const d of snapshot.docs) {
-      const data = d.data();
-      if (data.branch === currentBranch) {
-        parentId = d.id;
-        break;
+    
+    if (detachedHead) {
+      // detached HEAD状態: チェックアウトしたコミットを親にする
+      parentId = detachedHead;
+      // detached HEAD状態を解除
+      setDetachedHead(null);
+    } else {
+      // 通常: 現在ブランチの直近のコミットIDを取得
+      const latestQ = query(versionsRef, orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(latestQ);
+      for (const d of snapshot.docs) {
+        const data = d.data();
+        if (data.branch === currentBranch) {
+          parentId = d.id;
+          break;
+        }
       }
     }
+    
     // 新しいコミットを作成
     await addDoc(versionsRef, {
       ...projectData,
@@ -234,7 +279,7 @@ export const useProjectData = () => {
     });
     
     console.log('New version saved successfully');
-  }, [projectData, user]);
+  }, [projectData, user, currentBranch, detachedHead]);
 
   // 最新の確定版を読み込む
   const loadLatestVersion = useCallback(async () => {
@@ -291,7 +336,7 @@ export const useProjectData = () => {
     }));
   }, [user]);
 
-  // 特定のバージョンを読み込む
+  // 特定のバージョンを読み込む (soft: ブランチは変えない)
   const loadVersion = useCallback(async (versionId: string) => {
     if (!user || !firebaseApp) {
       throw new Error('Cannot load version: no user');
@@ -304,12 +349,12 @@ export const useProjectData = () => {
     const targetDoc = versionDoc.docs.find(d => d.id === versionId);
     if (targetDoc) {
       const versionData = targetDoc.data();
-      const { createdAt, note, ...projectDataFromVersion } = versionData;
+      const { createdAt, note, branch, parentId, mergeParentId, type, ...projectDataFromVersion } = versionData;
       const restoredData = ensureDataCompleteness(projectDataFromVersion as Partial<ProjectData>);
       
-      // draftを更新
-      const draftRef = doc(db, 'projects', user.uid, 'draft', 'current');
-      await setDoc(draftRef, restoredData);
+      // 現在のブランチのデータを更新
+      const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+      await setDoc(branchDataRef, restoredData);
       
       setProjectData(restoredData);
       await saveProjectDataToDB(restoredData);
@@ -318,7 +363,38 @@ export const useProjectData = () => {
     }
     
     throw new Error('Version not found');
-  }, [user]);
+  }, [user, currentBranch]);
+
+  // 特定のバージョンにチェックアウト (hard reset: detached HEAD状態)
+  const checkoutVersion = useCallback(async (versionId: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot checkout version: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionDoc = await getDocs(query(collection(db, 'projects', user.uid, 'versions')));
+    
+    const targetDoc = versionDoc.docs.find(d => d.id === versionId);
+    if (targetDoc) {
+      const versionData = targetDoc.data();
+      const { createdAt, note, branch, parentId, mergeParentId, type, ...projectDataFromVersion } = versionData;
+      const restoredData = ensureDataCompleteness(projectDataFromVersion as Partial<ProjectData>);
+      
+      // 現在のブランチのデータを更新
+      const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+      await setDoc(branchDataRef, restoredData);
+      
+      setProjectData(restoredData);
+      await saveProjectDataToDB(restoredData);
+      
+      // detached HEAD状態に入る
+      setDetachedHead(versionId);
+      
+      return restoredData;
+    }
+    
+    throw new Error('Version not found');
+  }, [user, currentBranch]);
 
   // 特定のバージョンを削除
   const deleteVersion = useCallback(async (versionId: string) => {
@@ -850,6 +926,8 @@ export const useProjectData = () => {
   return {
     projectData,
     currentBranch,
+    detachedHead,
+    hasUnsavedChanges,
     setData,
     resetProjectData,
     updateProjectName,
@@ -871,6 +949,7 @@ export const useProjectData = () => {
     saveVersion,
     loadLatestVersion,
     loadVersion,
+    checkoutVersion,
     getVersionHistory,
     deleteVersion,
     // ブランチ管理

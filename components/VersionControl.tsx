@@ -27,12 +27,14 @@ interface CommitGraphProps {
     mergeParentId: string | null;
     type: string;
   }>;
+  onCheckout: (versionId: string) => void;
 }
 
-const CommitGraph: React.FC<CommitGraphProps> = ({ versions }) => {
+const CommitGraph: React.FC<CommitGraphProps> = ({ versions, onCheckout }) => {
   // レーン割り当て: 各コミットにレーン番号を付ける
   const LANE_WIDTH = 24;
   const ROW_HEIGHT = 60;
+  const GRAPH_LEFT_MARGIN = 48; // グラフ左余白（スマホでは小さく）
   
   // コミットIDからインデックスへのマップ
   const idToIndex = new Map<string, number>();
@@ -56,7 +58,7 @@ const CommitGraph: React.FC<CommitGraphProps> = ({ versions }) => {
   });
 
   return (
-    <div className="relative">
+    <div className="relative overflow-x-auto">
       {versions.map((v, idx) => {
         const lane = lanes.get(v.id) || 0;
         const x = lane * LANE_WIDTH + 12;
@@ -68,11 +70,11 @@ const CommitGraph: React.FC<CommitGraphProps> = ({ versions }) => {
         const mergeParentIdx = v.mergeParentId ? idToIndex.get(v.mergeParentId) : null;
 
         return (
-          <div key={v.id} className="relative" style={{ height: ROW_HEIGHT }}>
+          <div key={v.id} className="relative" style={{ height: ROW_HEIGHT, minWidth: '100%' }}>
             {/* SVGレイヤー */}
             <svg
               className="absolute top-0 left-0 pointer-events-none"
-              style={{ width: '200px', height: ROW_HEIGHT }}
+              style={{ width: 'min(200px, 25vw)', height: ROW_HEIGHT }}
             >
               {/* 親コミットへの線 */}
               {parentIdx !== null && parentIdx !== undefined && (
@@ -129,31 +131,38 @@ const CommitGraph: React.FC<CommitGraphProps> = ({ versions }) => {
             </svg>
 
             {/* コミット情報 */}
-            <div className="flex items-center gap-3 ml-48">
-              <div className="flex-1 p-2 border border-border rounded-md hover:bg-secondary">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 ml-12 sm:ml-48">
+              <div className="flex-1 p-2 border border-border rounded-md hover:bg-secondary min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
                     {shortId(v.id)}
                   </span>
-                  <span className="text-sm">{v.note || '(no message)'}</span>
+                  <span className="text-sm break-words min-w-0">{v.note || '(no message)'}</span>
                   {v.type === 'merge' && (
-                    <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
+                    <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded shrink-0">
                       merge
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
                   <span
-                    className="font-mono px-1.5 py-0.5 rounded border"
+                    className="font-mono px-1.5 py-0.5 rounded border shrink-0"
                     style={{ borderColor: color, color: color }}
                   >
                     {v.branch}
                   </span>
                   {v.createdAt?.seconds && (
-                    <span>{new Date(v.createdAt.seconds * 1000).toLocaleString()}</span>
+                    <span className="break-all">{new Date(v.createdAt.seconds * 1000).toLocaleString()}</span>
                   )}
                 </div>
               </div>
+              <button
+                onClick={() => onCheckout(v.id)}
+                className="px-3 py-1 text-xs border border-border rounded-md hover:bg-secondary shrink-0 self-start sm:self-center"
+                title="このバージョンにチェックアウト"
+              >
+                Checkout
+              </button>
             </div>
           </div>
         );
@@ -165,13 +174,16 @@ const CommitGraph: React.FC<CommitGraphProps> = ({ versions }) => {
 const VersionControl = () => {
   const { 
     saveVersion, 
-    currentBranch, 
+    currentBranch,
+    detachedHead,
+    hasUnsavedChanges,
     createBranch, 
     switchBranch, 
     deleteBranch, 
     listBranches,
     mergeBranch,
     getVersionHistory,
+    checkoutVersion,
   } = useProjectData();
   const [note, setNote] = useState('');
   const [branches, setBranches] = useState<BranchInfo[]>([]);
@@ -276,6 +288,20 @@ const VersionControl = () => {
     }
   };
 
+  const handleCheckoutVersion = async (versionId: string) => {
+    if (!confirm(`このバージョンにチェックアウトしますか？(hard reset)\n次回コミット時、現在のHEADは孤立します。`)) {
+      return;
+    }
+    try {
+      await checkoutVersion(versionId);
+      alert(`Checked out to ${shortId(versionId)} (detached HEAD)`);
+      loadVersions();
+    } catch (error: any) {
+      console.error('チェックアウト中にエラーが発生しました:', error);
+      alert(error.message || 'チェックアウト中にエラーが発生しました。');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* タブナビゲーション */}
@@ -321,6 +347,11 @@ const VersionControl = () => {
               <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6.5a.75.75 0 0 1-1.5 0V5.372a2.25 2.25 0 0 1-1.5-2.122zm-5 9.5a2.25 2.25 0 1 1 3 2.122v-.878a.75.75 0 0 1-1.5 0v.878a2.25 2.25 0 0 1-1.5-2.122z"/>
             </svg>
             <span className="font-mono font-semibold">{currentBranch}</span>
+            {detachedHead && (
+              <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200">
+                detached HEAD ({shortId(detachedHead)})
+              </span>
+            )}
           </div>
 
           {/* コミットメッセージ入力 */}
@@ -340,11 +371,16 @@ const VersionControl = () => {
           {/* コミットボタン */}
           <button
             onClick={handleSaveVersion}
-            disabled={!note.trim()}
+            disabled={!note.trim() || !hasUnsavedChanges}
             className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
           >
             Commit to {currentBranch}
           </button>
+          {!hasUnsavedChanges && (
+            <p className="text-xs text-muted-foreground text-center">
+              変更がないためコミットできません
+            </p>
+          )}
         </div>
       )}
 
@@ -462,7 +498,7 @@ const VersionControl = () => {
       {activeTab === 'history' && (
         <div>
           {versions.length > 0 ? (
-            <CommitGraph versions={versions} />
+            <CommitGraph versions={versions} onCheckout={handleCheckoutVersion} />
           ) : (
             <div className="text-sm text-muted-foreground">履歴がありません。コミットを作成してください。</div>
           )}
