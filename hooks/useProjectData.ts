@@ -819,6 +819,18 @@ export const useProjectData = () => {
     updateAndPersistData(prev => ({...prev, scenes: prev.scenes.filter(s => s.id !== id)}));
   }, [updateAndPersistData]);
 
+  const reorderScenes = useCallback((fromIndex: number, toIndex: number) => {
+    updateAndPersistData(prev => {
+      const newScenes = [...prev.scenes];
+      if (fromIndex < 0 || fromIndex >= newScenes.length || toIndex < 0 || toIndex >= newScenes.length) {
+        return prev;
+      }
+      const [movedScene] = newScenes.splice(fromIndex, 1);
+      newScenes.splice(toIndex, 0, movedScene);
+      return {...prev, scenes: newScenes};
+    });
+  }, [updateAndPersistData]);
+
   const addSceneEvent = useCallback((sceneId: string, type: EventType, index?: number) => {
     if(!projectData) return;
     const newEvent: Partial<SceneEvent> = { id: `event-${Date.now()}`, type };
@@ -937,6 +949,7 @@ export const useProjectData = () => {
     addScene,
     updateScene,
     deleteScene,
+    reorderScenes,
     addSceneEvent,
     addSceneEvents,
     updateSceneEvent,

@@ -9,7 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { SearchIcon } from "./icons/SearchIcon";
 import { useProjectData } from "../hooks/useProjectData";
 import VersionControl from "./VersionControl";
-import { exportProjectAsYamlZip } from "../utils/yamlExport";
+import { exportProjectAsYamlZip, exportScenarioAsDOCX } from "../utils/yamlExport";
 
 declare const pako: any;
 
@@ -86,6 +86,26 @@ export const Header: React.FC<HeaderProps> = ({
     } catch (error) {
       console.error("Error exporting project as YAML:", error);
       alert("Failed to export project data as YAML.");
+    }
+  };
+
+  const handleExportScenarioDOCX = async () => {
+    try {
+      const blob = await exportScenarioAsDOCX(projectData);
+      const url = URL.createObjectURL(blob);
+      const exportFileDefaultName = `${projectData.projectName.replace(
+        /\s+/g,
+        "_"
+      )}_scenario.docx`;
+
+      const linkElement = document.createElement("a");
+      linkElement.setAttribute("href", url);
+      linkElement.setAttribute("download", exportFileDefaultName);
+      linkElement.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error exporting scenario as DOCX:", error);
+      alert("Failed to export scenario data as DOCX.");
     }
   };
 
@@ -203,6 +223,17 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full justify-start"
               >
                 {t("export", language)} YAML (ZIP)
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => {
+                  handleExportScenarioDOCX();
+                  setIsIOModalOpen(false);
+                }}
+                className="w-full justify-start"
+              >
+                {t("export", language)} {t("scenes", language)} (DOCX)
               </Button>
             </div>
             <button

@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import yaml from 'js-yaml';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } from 'docx';
 import { ProjectData, Scene, Character, Location, Item, Relationship, Asset, Variable, Memo, Task, Plot, Group, EventType } from '../types';
 
 /**
@@ -253,4 +254,193 @@ function sanitizeFileName(name: string): string {
     .replace(/[<>:"/\\|?*]/g, '_') // 禁止文字を_に置換
     .replace(/\s+/g, '_') // 空白を_に置換
     .substring(0, 100); // 長さ制限
+}
+
+/**
+ * シナリオをDOCX形式でエクスポート
+ */
+export async function exportScenarioAsDOCX(projectData: ProjectData): Promise<Blob> {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = await import('docx');
+
+  const paragraphs: any[] = [];
+
+  // タイトル
+  paragraphs.push(
+    new Paragraph({
+      text: projectData.projectName,
+      heading: HeadingLevel.HEADING_1,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 600 },
+    })
+  );
+
+  // 各シーン
+  projectData.scenes.forEach((scene, sceneIndex) => {
+    // シーンタイトル
+    paragraphs.push(
+      new Paragraph({
+        text: `シーン ${sceneIndex + 1}: ${scene.title}`,
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 400, after: 200 },
+      })
+    );
+
+    // イベント処理
+    scene.events.forEach((event, eventIndex) => {
+      let eventParagraphs: any[] = [];
+
+      switch (event.type) {
+        case EventType.DIALOGUE: {
+          // キャラクター名を取得
+          const character = projectData.characters.find(
+            (c) => c.id === event.characterId
+          );
+          const characterName = character?.name || '不明';
+
+          eventParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `${characterName}：`,
+                  bold: true,
+                }),
+                new TextRun(event.text),
+              ],
+              spacing: { after: 200 },
+            })
+          );
+          break;
+        }
+        case EventType.ACTION:
+          eventParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '【アクション】',
+                  bold: true,
+                  italics: true,
+                }),
+                new TextRun(event.description),
+              ],
+              spacing: { after: 200 },
+            })
+          );
+          break;
+        case EventType.BACKGROUND_CHANGE: {
+          const asset = projectData.assets.find(
+            (a) => a.id === event.backgroundAssetId
+          );
+          const assetName = asset?.name || '不明';
+
+          eventParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `【背景変更: ${assetName}】`,
+                  bold: true,
+                  italics: true,
+                }),
+              ],
+              spacing: { after: 200 },
+            })
+          );
+          break;
+        }
+        case EventType.BRANCH: {
+          eventParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: '【分岐】',
+                  bold: true,
+                  italics: true,
+                }),
+              ],
+              spacing: { after: 100 },
+            })
+          );
+
+          event.choices?.forEach((choice) => {
+            eventParagraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `→ ${choice.text}`,
+                  }),
+                ],
+                spacing: { before: 50, after: 50 },
+              })
+            );
+          });
+          break;
+        }
+        case EventType.GOTO_SCENE: {
+          const targetScene = projectData.scenes.find(
+            (s) => s.id === event.nextSceneId
+          );
+          const sceneName = targetScene?.title || '不明';
+
+          eventParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `【シーン遷移: ${sceneName}】`,
+                  bold: true,
+                  italics: true,
+                }),
+              ],
+              spacing: { after: 200 },
+            })
+          );
+          break;
+        }
+        case EventType.SFX: {
+          const asset = projectData.assets.find(
+            (a) => a.id === event.sfxAssetId
+          );
+          const assetName = asset?.name || '不明';
+
+          eventParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `【効果音: ${assetName}】`,
+                  bold: true,
+                  italics: true,
+                }),
+              ],
+              spacing: { after: 200 },
+            })
+          );
+          break;
+        }
+      }
+
+      paragraphs.push(...eventParagraphs);
+    });
+
+    // シーン間のスペーサー
+    if (sceneIndex < projectData.scenes.length - 1) {
+      paragraphs.push(
+        new Paragraph({
+          text: '',
+          spacing: { after: 400 },
+        })
+      );
+    }
+  });
+
+  // ドキュメント作成
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: paragraphs,
+      },
+    ],
+  });
+
+  // DOCX生成
+  const blob = await Packer.toBlob(doc);
+  return blob;
 }

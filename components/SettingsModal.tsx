@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useSettings } from "../contexts/SettingsContext";
 import { Button } from "./ui/Button";
-import { KeymapEditor } from "./KeymapEditor";
 import { useAuth } from "../contexts/AuthContext";
 
 // A simple check for the existence of the API key from environment variables.
@@ -94,148 +93,141 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="p-6 space-y-6 overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Left Column */}
-            <div className="space-y-6">
-              {/* Theme Settings */}
-              <div className="space-y-2">
-                <label className="text-md font-semibold text-foreground">
-                  {t("theme", language)}
-                </label>
-                <div className="flex gap-2 p-1 bg-secondary rounded-lg">
-                  <button
-                    onClick={() => setTheme("light")}
-                    className={`flex-1 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-                      theme === "light"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-secondary-hover"
-                    }`}
-                  >
-                    {t("light", language)}
-                  </button>
-                  <button
-                    onClick={() => setTheme("dark")}
-                    className={`flex-1 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
-                      theme === "dark"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-secondary-hover"
-                    }`}
-                  >
-                    {t("dark", language)}
-                  </button>
-                </div>
-              </div>
-
-              {/* Language Settings */}
-              <div className="space-y-2">
-                <label
-                  htmlFor="language-select"
-                  className="text-md font-semibold text-foreground"
+          <div className="space-y-6">
+            {/* Theme Settings */}
+            <div className="space-y-2">
+              <label className="text-md font-semibold text-foreground">
+                {t("theme", language)}
+              </label>
+              <div className="flex gap-2 p-1 bg-secondary rounded-lg">
+                <button
+                  onClick={() => setTheme("light")}
+                  className={`flex-1 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+                    theme === "light"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-secondary-hover"
+                  }`}
                 >
-                  {t("language", language)}
-                </label>
-                <select
-                  id="language-select"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as "en" | "ja")}
-                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:ring-2 focus:ring-ring focus:border-ring outline-none"
+                  {t("light", language)}
+                </button>
+                <button
+                  onClick={() => setTheme("dark")}
+                  className={`flex-1 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+                    theme === "dark"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-secondary-hover"
+                  }`}
                 >
-                  <option value="en">English</option>
-                  <option value="ja">日本語</option>
-                </select>
-              </div>
-
-              {/* User Guide */}
-              <div className="space-y-2">
-                <label className="text-md font-semibold text-foreground">
-                  {t("userGuide", language)}
-                </label>
-                <Button
-                  variant="secondary"
-                  onClick={handleShowGuide}
-                  className="w-full"
-                >
-                  {t("showUserGuide", language)}
-                </Button>
-              </div>
-
-              {/* Service Status */}
-              <div className="space-y-4 pt-4 border-t border-border">
-                <h3 className="text-md font-semibold text-foreground">
-                  {t("serviceStatus", language)}
-                </h3>
-                {/* AI Settings */}
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {t("aiAssistant", language)}
-                  </p>
-                  {isAiAvailable ? (
-                    <>
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        {t("featureEnabled", language)}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                        {t("featureDisabled", language)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("aiDisabledHint", language)}
-                      </p>
-                      <Button
-                        onClick={handleOpenApiKeyModal}
-                        className="w-full"
-                      >
-                        {t("registerApiKey", language)}
-                      </Button>
-                    </>
-                  )}
-                </div>
-                {/* Sync Settings */}
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {t("cloudSync", language)}
-                  </p>
-                  {isFirebaseAvailable ? (
-                    <>
-                      <p className="text-xs text-green-600 dark:text-green-400">
-                        {t("featureEnabled", language)}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                        {t("featureDisabled", language)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("syncDisabledHint", language)}
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Data Management */}
-              <div className="space-y-2 pt-4 border-t border-border">
-                <h3 className="text-md font-semibold text-danger">
-                  {t("dataManagement", language)}
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  {t("resetWarning", language)}
-                </p>
-                <Button
-                  variant="danger"
-                  onClick={onResetData}
-                  className="w-full"
-                >
-                  {t("resetAllData", language)}
-                </Button>
+                  {t("dark", language)}
+                </button>
               </div>
             </div>
-            {/* Right Column */}
-            <div className="hidden md:block space-y-2">
-              <KeymapEditor />
+
+            {/* Language Settings */}
+            <div className="space-y-2">
+              <label
+                htmlFor="language-select"
+                className="text-md font-semibold text-foreground"
+              >
+                {t("language", language)}
+              </label>
+              <select
+                id="language-select"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as "en" | "ja")}
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:ring-2 focus:ring-ring focus:border-ring outline-none"
+              >
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+              </select>
+            </div>
+
+            {/* User Guide */}
+            <div className="space-y-2">
+              <label className="text-md font-semibold text-foreground">
+                {t("userGuide", language)}
+              </label>
+              <Button
+                variant="secondary"
+                onClick={handleShowGuide}
+                className="w-full"
+              >
+                {t("showUserGuide", language)}
+              </Button>
+            </div>
+
+            {/* Service Status */}
+            <div className="space-y-4 pt-4 border-t border-border">
+              <h3 className="text-md font-semibold text-foreground">
+                {t("serviceStatus", language)}
+              </h3>
+              {/* AI Settings */}
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {t("aiAssistant", language)}
+                </p>
+                {isAiAvailable ? (
+                  <>
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      {t("featureEnabled", language)}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                      {t("featureDisabled", language)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("aiDisabledHint", language)}
+                    </p>
+                    <Button
+                      onClick={handleOpenApiKeyModal}
+                      className="w-full"
+                    >
+                      {t("registerApiKey", language)}
+                    </Button>
+                  </>
+                )}
+              </div>
+              {/* Sync Settings */}
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {t("cloudSync", language)}
+                </p>
+                {isFirebaseAvailable ? (
+                  <>
+                    <p className="text-xs text-green-600 dark:text-green-400">
+                      {t("featureEnabled", language)}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                      {t("featureDisabled", language)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t("syncDisabledHint", language)}
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Data Management */}
+            <div className="space-y-2 pt-4 border-t border-border">
+              <h3 className="text-md font-semibold text-danger">
+                {t("dataManagement", language)}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {t("resetWarning", language)}
+              </p>
+              <Button
+                variant="danger"
+                onClick={onResetData}
+                className="w-full"
+              >
+                {t("resetAllData", language)}
+              </Button>
             </div>
           </div>
         </div>

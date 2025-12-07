@@ -229,21 +229,3 @@ export interface BranchInfo {
   createdAt: any; // Firestore Timestamp
   lastModified: any; // Firestore Timestamp
 }
-
-export type ShortcutAction =
-  | 'NEW_SCENE'
-  | 'NEW_CHARACTER'
-  | 'CLOSE_SHEET'
-  | 'FOCUS_SEARCH'
-  | 'DELETE_NODE'
-  | 'EDIT_NODE'
-  | 'NAV_UP'
-  | 'NAV_DOWN'
-  | 'NAV_LEFT'
-  | 'NAV_RIGHT'
-  | 'PAN_VIEW_UP'
-  | 'PAN_VIEW_DOWN'
-  | 'PAN_VIEW_LEFT'
-  | 'PAN_VIEW_RIGHT'
-  | 'ZOOM_IN'
-  | 'ZOOM_OUT';

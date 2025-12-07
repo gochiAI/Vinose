@@ -1,5 +1,5 @@
-
 import React, { useRef, useCallback, useEffect } from 'react';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface MinimapProps {
   nodePositions: { [key: string]: { x: number; y: number } };
@@ -22,6 +22,7 @@ export const Minimap: React.FC<MinimapProps> = ({
   onViewChange,
   nodeSize,
 }) => {
+  const { theme } = useSettings();
   const minimapRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
@@ -100,11 +101,16 @@ export const Minimap: React.FC<MinimapProps> = ({
       });
   };
 
+  // 色設定（light/darkで分岐）
+  const nodeColor = theme === 'light' ? '#555' : '#ddd';
+  const groupBorderColor = theme === 'light' ? '#888' : '#ccc';
+  const minimapBg = theme === 'light' ? 'rgba(255,255,255,0.9)' : 'rgba(30,30,30,0.9)';
+
   return (
     <div
       ref={minimapRef}
-      className="absolute bottom-3 left-3 bg-card/80 border border-border rounded-md shadow-lg overflow-hidden backdrop-blur-sm animate-fade-in-fast"
-      style={{ width: MINIMAP_WIDTH, height: minimapHeight }}
+      className="absolute bottom-3 left-3 border border-border rounded-md shadow-lg overflow-hidden backdrop-blur-sm animate-fade-in-fast"
+      style={{ width: MINIMAP_WIDTH, height: minimapHeight, background: minimapBg }}
       onMouseDown={handleMapMouseDown}
     >
         {groups.map(group => (
@@ -116,17 +122,15 @@ export const Minimap: React.FC<MinimapProps> = ({
                     top: group.y * scale,
                     width: group.width * scale,
                     height: group.height * scale,
-                    borderColor: group.color,
+                    borderColor: groupBorderColor || group.color,
                 }}
             />
         ))}
-        {/* FIX: Add explicit type for `pos` to resolve `unknown` type error. */}
         {Object.values(nodePositions).map((pos: { x: number; y: number }, index) => (
             <div
                 key={index}
-                className="absolute bg-muted pointer-events-none"
+                className="absolute pointer-events-none"
                 style={{
-                    // FIX: Use optional chaining to safely access properties of `nodeSize`.
                     left: nodeSize?.radius
                         ? (pos.x - nodeSize.radius) * scale
                         : pos.x * scale,
@@ -136,6 +140,7 @@ export const Minimap: React.FC<MinimapProps> = ({
                     width: (nodeSize?.radius ? nodeSize.radius * 2 : (nodeSize?.width || 0)) * scale,
                     height: (nodeSize?.radius ? nodeSize.radius * 2 : (nodeSize?.height || 0)) * scale,
                     borderRadius: nodeSize?.radius ? '50%' : '2px',
+                    background: nodeColor,
                 }}
             />
         ))}

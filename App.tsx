@@ -17,7 +17,6 @@ import { ContextMenu, ContextMenuItem } from './components/ui/ContextMenu';
 import { UserGuide } from './components/UserGuide';
 import { ChatBot } from './components/ChatBot';
 import { InteractivePreview } from './components/InteractivePreview';
-import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { Footer } from './components/Footer';
 
 type TabType = 'location' | 'item' | 'memo' | 'task' | 'asset' | 'plot' | 'variable' | 'group';
@@ -36,6 +35,7 @@ const AppContent: React.FC = () => {
     addScene,
     updateScene,
     deleteScene,
+    reorderScenes,
     addSceneEvent,
     addSceneEvents,
     updateSceneEvent,
@@ -124,21 +124,6 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     setFocusedNodeId(null);
   }, [mainView]);
-
-  useKeyboardShortcuts({
-    CLOSE_SHEET: () => {
-        if (previewingSceneId) setPreviewingSceneId(null);
-        else if (activeInfo) closeSheet();
-        else if (isSettingsOpen) setIsSettingsOpen(false);
-        else if (isGuideOpen) handleCloseGuide();
-        else if (contextMenu) setContextMenu(null);
-    },
-    FOCUS_SEARCH: () => {
-        const searchInput = document.querySelector('[data-tour-id="search-bar"] input') as HTMLInputElement;
-        searchInput?.focus();
-        searchInput?.select();
-    },
-  });
 
   const searchResults = useMemo((): SearchResult[] => {
     if (!searchQuery.trim() || !projectData) return [];
@@ -407,6 +392,7 @@ const AppContent: React.FC = () => {
             onEditScene={(id) => handleEditItem('scene', id)}
             onViewScene={handleViewScene}
             onDeleteScene={handleDeleteSceneWithConfirmation}
+            onReorderScenes={reorderScenes}
             selectedSceneId={activeInfo?.type === 'scene' ? activeInfo.id : undefined}
             focusedNodeId={focusedNodeId}
             setFocusedNodeId={setFocusedNodeId}
