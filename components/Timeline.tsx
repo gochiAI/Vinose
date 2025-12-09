@@ -9,9 +9,9 @@ import { useSettings } from '../contexts/SettingsContext';
 import { ContextMenuItem } from './ui/ContextMenu';
 import { InfoIcon } from './icons/InfoIcon';
 import { PlayIcon } from './icons/PlayIcon';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { Minimap } from './Minimap';
 import { MapIcon } from './icons/MapIcon';
-import { useKeyboardShortcuts, ShortcutMap } from '../hooks/useKeyboardShortcuts';
 
 interface TimelineProps {
   scenes: Scene[];
@@ -20,6 +20,7 @@ interface TimelineProps {
   onEditScene: (id: string) => void;
   onViewScene: (id: string) => void;
   onDeleteScene: (id: string) => void;
+  onReorderScenes: (fromIndex: number, toIndex: number) => void;
   selectedSceneId?: string;
   focusedNodeId: string | null;
   setFocusedNodeId: (id: string | null) => void;
@@ -44,15 +45,18 @@ const getCurvePath = (x1: number, y1: number, x2: number, y2: number): string =>
   return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
 };
 
-const SceneNode = React.memo(({ scene, index, position, isSelected, isFocused, isStartNode, onClick, onDelete, onContextMenu, t, language }: {
+const SceneNode = React.memo(({ scene, index, totalScenes, position, isSelected, isFocused, isStartNode, onClick, onDelete, onMoveUp, onMoveDown, onContextMenu, t, language }: {
     scene: Scene;
     index: number;
+    totalScenes: number;
     position: { x: number; y: number };
     isSelected: boolean;
     isFocused: boolean;
     isStartNode: boolean;
     onClick: () => void;
     onDelete: (e: React.MouseEvent) => void;
+    onMoveUp: (e: React.MouseEvent) => void;
+    onMoveDown: (e: React.MouseEvent) => void;
     onContextMenu: (e: React.MouseEvent) => void;
     t: (key: any, lang: any) => string;
     language: 'en' | 'ja';
@@ -70,17 +74,35 @@ const SceneNode = React.memo(({ scene, index, position, isSelected, isFocused, i
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
-        <div className="flex justify-between items-start">
-            <h3 className="font-bold text-sm text-foreground truncate" title={scene.title || t('untitledScene', language)}>
+        <div className="flex justify-between items-start gap-1">
+            <h3 className="font-bold text-sm text-foreground truncate flex-1" title={scene.title || t('untitledScene', language)}>
                 {t('scene', language)} {index + 1}: {scene.title || t('untitledScene', language)}
             </h3>
-            <button
-                onClick={onDelete}
-                className="p-1 rounded-full text-muted-foreground hover:bg-border hover:text-danger flex-shrink-0"
-                title={t('deleteScene', language)}
-            >
-                <TrashIcon className="w-4 h-4" />
-            </button>
+            <div className="flex gap-0.5 flex-shrink-0">
+                <button
+                    onClick={onMoveUp}
+                    disabled={index === 0}
+                    className="p-1 rounded-full text-muted-foreground hover:bg-border hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+                    title={t('moveUp', language)}
+                >
+                    <ChevronDownIcon className="w-3 h-3 rotate-180" />
+                </button>
+                <button
+                    onClick={onMoveDown}
+                    disabled={index === totalScenes - 1}
+                    className="p-1 rounded-full text-muted-foreground hover:bg-border hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"
+                    title={t('moveDown', language)}
+                >
+                    <ChevronDownIcon className="w-3 h-3" />
+                </button>
+                <button
+                    onClick={onDelete}
+                    className="p-1 rounded-full text-muted-foreground hover:bg-border hover:text-danger flex-shrink-0"
+                    title={t('deleteScene', language)}
+                >
+                    <TrashIcon className="w-4 h-4" />
+                </button>
+            </div>
         </div>
         <p className="text-xs text-muted-foreground mt-1">
             {scene.events.length} {scene.events.length !== 1 ? t('events', language) : t('event', language)}
@@ -88,7 +110,7 @@ const SceneNode = React.memo(({ scene, index, position, isSelected, isFocused, i
     </div>
 ));
 
-export const Timeline: React.FC<TimelineProps> = ({ scenes, groups, variables, onEditScene, onViewScene, onDeleteScene, selectedSceneId, focusedNodeId, setFocusedNodeId, onAddScene, showContextMenu, onStartPreview }) => {
+export const Timeline: React.FC<TimelineProps> = ({ scenes, groups, variables, onEditScene, onViewScene, onDeleteScene, onReorderScenes, selectedSceneId, focusedNodeId, setFocusedNodeId, onAddScene, showContextMenu, onStartPreview }) => {
   const [viewTransform, setViewTransform] = useState({ x: 20, y: 20, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [showEdgeLabels, setShowEdgeLabels] = useState(false);
@@ -459,24 +481,6 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, groups, variables, o
     }
 }, [focusedNodeId, nodePositions, allScenesSorted, setFocusedNodeId]);
 
-  const shortcutHandlers: ShortcutMap = useMemo(() => ({
-      NEW_SCENE: onAddScene,
-      DELETE_NODE: () => focusedNodeId && onDeleteScene(focusedNodeId),
-      EDIT_NODE: () => focusedNodeId && onEditScene(focusedNodeId),
-      NAV_UP: () => findNextNode('up'),
-      NAV_DOWN: () => findNextNode('down'),
-      NAV_LEFT: () => findNextNode('left'),
-      NAV_RIGHT: () => findNextNode('right'),
-      ZOOM_IN: () => handleZoom('in'),
-      ZOOM_OUT: () => handleZoom('out'),
-      PAN_VIEW_UP: () => handlePan(0, 50),
-      PAN_VIEW_DOWN: () => handlePan(0, -50),
-      PAN_VIEW_LEFT: () => handlePan(50, 0),
-      PAN_VIEW_RIGHT: () => handlePan(-50, 0),
-  }), [onAddScene, onDeleteScene, onEditScene, focusedNodeId, findNextNode]);
-
-  useKeyboardShortcuts(shortcutHandlers);
-
   return (
     <div className="flex-1 relative" data-tour-id="timeline-view">
         <div 
@@ -575,6 +579,7 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, groups, variables, o
                             key={scene.id}
                             scene={scene}
                             index={index}
+                            totalScenes={allScenesSorted.length}
                             position={position}
                             isSelected={scene.id === selectedSceneId}
                             isFocused={scene.id === focusedNodeId}
@@ -584,6 +589,14 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, groups, variables, o
                                 e.stopPropagation();
                                 onDeleteScene(scene.id);
                             }}
+                            onMoveUp={(e) => {
+                                e.stopPropagation();
+                                if (index > 0) onReorderScenes(index, index - 1);
+                            }}
+                            onMoveDown={(e) => {
+                                e.stopPropagation();
+                                if (index < allScenesSorted.length - 1) onReorderScenes(index, index + 1);
+                            }}
                             onContextMenu={(e) => {
                                 showContextMenu(e, [
                                   { label: t('startPreviewHere', language), icon: PlayIcon, onClick: () => onStartPreview(scene.id) },
@@ -591,6 +604,9 @@ export const Timeline: React.FC<TimelineProps> = ({ scenes, groups, variables, o
                                   { label: `${t('view', language)} ${t('scene', language)}`, onClick: () => onViewScene(scene.id) },
                                   { label: `${t('edit', language)} ${t('scene', language)}`, onClick: () => onEditScene(scene.id) },
                                   { isSeparator: true },
+                                  ...(index > 0 ? [{ label: t('moveUp', language), onClick: () => onReorderScenes(index, index - 1) }] : []),
+                                  ...(index < allScenesSorted.length - 1 ? [{ label: t('moveDown', language), onClick: () => onReorderScenes(index, index + 1) }] : []),
+                                  ...(index > 0 || index < allScenesSorted.length - 1 ? [{ isSeparator: true }] : []),
                                   { label: `${t('delete', language)} ${t('scene', language)}`, onClick: () => onDeleteScene(scene.id), isDanger: true },
                                 ]);
                             }}

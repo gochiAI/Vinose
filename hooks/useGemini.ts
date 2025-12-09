@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { GoogleGenAI } from '@google/genai';
 
 export function useGemini() {
-  const apiKey = process.env.API_KEY;
+  const apiKey = localStorage.getItem("apiKey");
   if (!apiKey) {
     // キーが無い場合は機能を無効化する（UI 側で適切に扱ってください）
     return {

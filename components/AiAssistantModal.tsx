@@ -58,7 +58,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
                 </div>
 
                 <div className="p-4 flex-1 overflow-y-auto">
-                    {!isAvailable ? (
+                    {isAvailable ? (
                         <div className="text-center p-8 bg-background rounded-md border border-border">
                             <h3 className="text-lg font-semibold">{t('aiUnavailable', language)}</h3>
                             <p className="text-muted-foreground mt-2">{t('aiUnavailableHint', language)}</p>

@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
-import { ProjectData, Character, Location, Item, Scene, SceneEvent, DbItemType, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, Relationship, GoToSceneEvent, Memo, Task, Asset, AssetType, Plot, SfxEvent, Variable, VariableType, BranchEvent, BranchMode, Group } from '../types';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { debounce } from 'lodash';
+import { ProjectData, Character, Location, Item, Scene, SceneEvent, DbItemType, EventType, DialogueEvent, ActionEvent, BackgroundChangeEvent, Relationship, GoToSceneEvent, Memo, Task, Asset, AssetType, Plot, SfxEvent, Variable, VariableType, BranchEvent, BranchMode, Group, BranchInfo } from '../types';
 import { getProjectDataFromDB, saveProjectDataToDB } from '../utils/db';
 import { useAuth } from '../contexts/AuthContext';
-import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, collection, addDoc, query, orderBy, limit, getDocs, serverTimestamp, getDoc, updateDoc } from 'firebase/firestore';
 import { firebaseApp } from '../firebase';
 
 export const getInitialData = (): ProjectData => ({
@@ -63,11 +64,57 @@ const ensureDataCompleteness = (data: Partial<ProjectData>): ProjectData => {
 
 export const useProjectData = () => {
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
+  const [currentBranch, setCurrentBranch] = useState<string>('draft');
+  const [detachedHead, setDetachedHead] = useState<string | null>(null); // チェックアウトしたコミットID
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // ローカルとFirestoreの差分
   const { user, loading: authLoading } = useAuth();
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSavingRef = useRef(false); // 保存中の状態を管理
+  const lastFirestoreData = useRef<ProjectData | null>(null); // 最後にFirestoreから取得したデータ
+  const isLocalUpdateRef = useRef(false); // ローカル更新による保存かどうか
+
+  // デバウンス付きの保存処理
+  const debouncedSaveToFirestore = useCallback(
+    debounce(async (data: ProjectData, branch: string) => {
+      if (!user || !firebaseApp) return;
+
+      // 最後に保存したデータと同じ場合はスキップ
+      if (lastFirestoreData.current && JSON.stringify(lastFirestoreData.current) === JSON.stringify(data)) {
+        console.log('Data unchanged, skipping Firestore write');
+        return;
+      }
+
+      const db = getFirestore(firebaseApp);
+      const branchRef = doc(db, 'projects', user.uid, 'branches', branch, 'data', 'current');
+
+      try {
+        isSavingRef.current = true; // 保存中フラグを設定
+        isLocalUpdateRef.current = true; // ローカル更新フラグ
+        await setDoc(branchRef, data, { merge: false }); // merge: false で完全上書き
+        // ブランチのlastModifiedを更新
+        const branchMetaRef = doc(db, 'projects', user.uid, 'branches', branch);
+        await updateDoc(branchMetaRef, { lastModified: serverTimestamp() });
+        lastFirestoreData.current = data; // 保存したデータを記録
+        setHasUnsavedChanges(false); // 保存完了したので差分なし
+        
+        // フラグを遅延リセット（onSnapshotが発火する前にフラグを保持）
+        setTimeout(() => {
+          isLocalUpdateRef.current = false;
+        }, 1000);
+        
+        console.log(`Branch '${branch}' saved to Firestore`);
+      } catch (error) {
+        console.error('Error saving branch to Firestore:', error);
+      } finally {
+        isSavingRef.current = false; // 保存中フラグを解除
+      }
+    }, 3000, { maxWait: 5000 }), // デバウンス時間を 3 秒、最大待機 5 秒に設定
+    [user]
+  );
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
-    setProjectData(null); // Reset data on auth change
+    setProjectData(null);
 
     const loadLocalData = async () => {
         const data: Partial<ProjectData> | null = await getProjectDataFromDB();
@@ -86,23 +133,52 @@ export const useProjectData = () => {
 
     if (user && firebaseApp) {
         const db = getFirestore(firebaseApp);
-        const docRef = doc(db, 'projects', user.uid);
-        unsubscribe = onSnapshot(docRef, (docSnap) => {
+        // 現在のブランチのデータを監視
+        const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+        
+        unsubscribe = onSnapshot(branchDataRef, async (docSnap) => {
+            // 自分の保存による更新はスキップ
+            if (isLocalUpdateRef.current || isSavingRef.current) {
+                console.log('Skipping onSnapshot: local update in progress');
+                return;
+            }
+            
             if (docSnap.exists()) {
                 const cloudData = ensureDataCompleteness(docSnap.data() as Partial<ProjectData>);
+                
+                // データが同じ場合はスキップ
+                if (lastFirestoreData.current && JSON.stringify(lastFirestoreData.current) === JSON.stringify(cloudData)) {
+                    console.log('Skipping onSnapshot: data unchanged');
+                    return;
+                }
+                
+                lastFirestoreData.current = cloudData; // Firestoreデータを記録
                 setProjectData(cloudData);
-                saveProjectDataToDB(cloudData); // Update local cache
+                setHasUnsavedChanges(false); // Firestoreと同期したので差分なし
+                saveProjectDataToDB(cloudData);
             } else {
-                // New user in Firestore, check if there's local data to upload
-                getProjectDataFromDB().then(localData => {
-                    const dataToStartWith = localData ? ensureDataCompleteness(localData) : getInitialData();
-                    setDoc(docRef, dataToStartWith); // This will trigger onSnapshot again
-                    setProjectData(dataToStartWith);
-                });
+                // ブランチが存在しない場合は作成
+                const branchMetaRef = doc(db, 'projects', user.uid, 'branches', currentBranch);
+                const branchMetaSnap = await getDoc(branchMetaRef);
+                
+                if (!branchMetaSnap.exists()) {
+                    // 新規ブランチを作成
+                    await setDoc(branchMetaRef, {
+                        name: currentBranch,
+                        createdAt: serverTimestamp(),
+                        lastModified: serverTimestamp(),
+                    });
+                }
+                
+                // ローカルデータまたは初期データをブランチに保存
+                const localData = await getProjectDataFromDB();
+                const dataToStartWith = localData ? ensureDataCompleteness(localData) : getInitialData();
+                await setDoc(branchDataRef, dataToStartWith);
+                setProjectData(dataToStartWith);
             }
         }, (error) => {
             console.error("Firestore listen failed:", error);
-            loadLocalData(); // Fallback to local on error
+            loadLocalData();
         });
 
     } else {
@@ -113,24 +189,399 @@ export const useProjectData = () => {
         if (unsubscribe) {
             unsubscribe();
         }
+        if (saveTimerRef.current) {
+            clearTimeout(saveTimerRef.current);
+        }
+        // デバウンス中の保存をキャンセル
+        debouncedSaveToFirestore.cancel();
     };
-  }, [user, authLoading]);
+  }, [user, authLoading, currentBranch]);
 
-  const updateAndPersistData = useCallback(async (updater: (prev: ProjectData) => ProjectData) => {
-    setProjectData(prev => {
+  // タブ閉じ時の保存処理を追加
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (projectData && user && firebaseApp) {
+        // デバウンス中の保存を即座に実行
+        debouncedSaveToFirestore.flush();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [projectData, user, currentBranch]);
+
+  // データを更新して保存
+  const updateAndPersistData = useCallback(
+    (updater: (prev: ProjectData) => ProjectData) => {
+      setProjectData((prev) => {
         if (!prev) return null;
         const newData = updater(prev);
-        
-        saveProjectDataToDB(newData); // Always persist to local DB for offline cache
 
-        if (user && firebaseApp) {
-            const db = getFirestore(firebaseApp);
-            const docRef = doc(db, 'projects', user.uid);
-            setDoc(docRef, newData).catch(e => console.error("Firestore save error:", e));
-        }
+        saveProjectDataToDB(newData); // ローカル保存
+
+        // Firestore に保存（デバウンス処理）
+        debouncedSaveToFirestore(newData, currentBranch);
+        
+        // ローカルに変更があることを記録
+        setHasUnsavedChanges(true);
+
         return newData;
+      });
+    },
+    [debouncedSaveToFirestore, currentBranch]
+  );
+
+  // コンポーネントのアンマウント時にデバウンスをキャンセル
+  useEffect(() => {
+    return () => {
+      debouncedSaveToFirestore.cancel();
+    };
+  }, [debouncedSaveToFirestore]);
+
+  // 確定版としてバージョンを保存
+  const saveVersion = useCallback(async (note?: string) => {
+    if (!projectData || !user || !firebaseApp) {
+      throw new Error('Cannot save version: no data or user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionsRef = collection(db, 'projects', user.uid, 'versions');
+    
+    let parentId: string | null = null;
+    
+    if (detachedHead) {
+      // detached HEAD状態: チェックアウトしたコミットを親にする
+      parentId = detachedHead;
+      // detached HEAD状態を解除
+      setDetachedHead(null);
+    } else {
+      // 通常: 現在ブランチの直近のコミットIDを取得
+      const latestQ = query(versionsRef, orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(latestQ);
+      for (const d of snapshot.docs) {
+        const data = d.data();
+        if (data.branch === currentBranch) {
+          parentId = d.id;
+          break;
+        }
+      }
+    }
+    
+    // 新しいコミットを作成
+    await addDoc(versionsRef, {
+      ...projectData,
+      createdAt: serverTimestamp(),
+      note: note || '',
+      branch: currentBranch,
+      parentId: parentId || null,
+      mergeParentId: null,
+      type: 'commit',
+    });
+    
+    console.log('New version saved successfully');
+  }, [projectData, user, currentBranch, detachedHead]);
+
+  // 最新の確定版を読み込む
+  const loadLatestVersion = useCallback(async () => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot load version: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionsRef = collection(db, 'projects', user.uid, 'versions');
+    const q = query(versionsRef, orderBy('createdAt', 'desc'), limit(1));
+    
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      const latestDoc = querySnapshot.docs[0];
+      const versionData = latestDoc.data();
+      
+      // createdAtとnoteを除外してProjectDataとして復元
+      const { createdAt, note, ...projectDataFromVersion } = versionData;
+      const restoredData = ensureDataCompleteness(projectDataFromVersion as Partial<ProjectData>);
+      
+      // draftを更新
+      const draftRef = doc(db, 'projects', user.uid, 'draft', 'current');
+      await setDoc(draftRef, restoredData);
+      
+      setProjectData(restoredData);
+      await saveProjectDataToDB(restoredData);
+      
+      return restoredData;
+    }
+    
+    throw new Error('No versions found');
+  }, [user]);
+
+  // 全バージョン履歴を取得
+  const getVersionHistory = useCallback(async () => {
+    if (!user || !firebaseApp) {
+      return [];
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionsRef = collection(db, 'projects', user.uid, 'versions');
+    const q = query(versionsRef, orderBy('createdAt', 'desc'));
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      createdAt: (doc.data() as any).createdAt,
+      note: (doc.data() as any).note || '',
+      projectName: (doc.data() as any).projectName,
+      branch: (doc.data() as any).branch || 'draft',
+      parentId: (doc.data() as any).parentId || null,
+      mergeParentId: (doc.data() as any).mergeParentId || null,
+      type: (doc.data() as any).type || 'commit',
+    }));
+  }, [user]);
+
+  // 特定のバージョンを読み込む (soft: ブランチは変えない)
+  const loadVersion = useCallback(async (versionId: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot load version: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionRef = doc(db, 'projects', user.uid, 'versions', versionId);
+    const versionDoc = await getDocs(query(collection(db, 'projects', user.uid, 'versions')));
+    
+    const targetDoc = versionDoc.docs.find(d => d.id === versionId);
+    if (targetDoc) {
+      const versionData = targetDoc.data();
+      const { createdAt, note, branch, parentId, mergeParentId, type, ...projectDataFromVersion } = versionData;
+      const restoredData = ensureDataCompleteness(projectDataFromVersion as Partial<ProjectData>);
+      
+      // 現在のブランチのデータを更新
+      const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+      await setDoc(branchDataRef, restoredData);
+      
+      setProjectData(restoredData);
+      await saveProjectDataToDB(restoredData);
+      
+      return restoredData;
+    }
+    
+    throw new Error('Version not found');
+  }, [user, currentBranch]);
+
+  // 特定のバージョンにチェックアウト (hard reset: detached HEAD状態)
+  const checkoutVersion = useCallback(async (versionId: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot checkout version: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionDoc = await getDocs(query(collection(db, 'projects', user.uid, 'versions')));
+    
+    const targetDoc = versionDoc.docs.find(d => d.id === versionId);
+    if (targetDoc) {
+      const versionData = targetDoc.data();
+      const { createdAt, note, branch, parentId, mergeParentId, type, ...projectDataFromVersion } = versionData;
+      const restoredData = ensureDataCompleteness(projectDataFromVersion as Partial<ProjectData>);
+      
+      // 現在のブランチのデータを更新
+      const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+      await setDoc(branchDataRef, restoredData);
+      
+      setProjectData(restoredData);
+      await saveProjectDataToDB(restoredData);
+      
+      // detached HEAD状態に入る
+      setDetachedHead(versionId);
+      
+      return restoredData;
+    }
+    
+    throw new Error('Version not found');
+  }, [user, currentBranch]);
+
+  // 特定のバージョンを削除
+  const deleteVersion = useCallback(async (versionId: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot delete version: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const versionRef = doc(db, 'projects', user.uid, 'versions', versionId);
+
+    try {
+      await setDoc(versionRef, {}, { merge: false }); // バージョンを削除
+      console.log(`Version ${versionId} deleted successfully`);
+    } catch (error) {
+      console.error('Error deleting version:', error);
+      throw error;
+    }
+  }, [user]);
+
+  // ブランチを作成
+  const createBranch = useCallback(async (branchName: string, fromBranch?: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot create branch: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const newBranchMetaRef = doc(db, 'projects', user.uid, 'branches', branchName);
+    
+    // ブランチが既に存在するかチェック
+    const branchSnap = await getDoc(newBranchMetaRef);
+    if (branchSnap.exists()) {
+      throw new Error(`Branch '${branchName}' already exists`);
+    }
+
+    // 新しいブランチのメタデータを作成
+    await setDoc(newBranchMetaRef, {
+      name: branchName,
+      createdAt: serverTimestamp(),
+      lastModified: serverTimestamp(),
+    });
+
+    // ソースブランチからデータをコピー
+    const sourceBranch = fromBranch || currentBranch;
+    const sourceBranchDataRef = doc(db, 'projects', user.uid, 'branches', sourceBranch, 'data', 'current');
+    const sourceBranchDataSnap = await getDoc(sourceBranchDataRef);
+    
+    if (sourceBranchDataSnap.exists()) {
+      const sourceData = sourceBranchDataSnap.data();
+      const newBranchDataRef = doc(db, 'projects', user.uid, 'branches', branchName, 'data', 'current');
+      await setDoc(newBranchDataRef, sourceData);
+    } else {
+      // ソースブランチにデータがない場合は現在のprojectDataまたは初期データを使用
+      const dataToUse = projectData || getInitialData();
+      const newBranchDataRef = doc(db, 'projects', user.uid, 'branches', branchName, 'data', 'current');
+      await setDoc(newBranchDataRef, dataToUse);
+    }
+
+    console.log(`Branch '${branchName}' created successfully`);
+  }, [user, currentBranch, projectData]);
+
+  // ブランチを切り替え
+  const switchBranch = useCallback(async (branchName: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot switch branch: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const branchMetaRef = doc(db, 'projects', user.uid, 'branches', branchName);
+    const branchSnap = await getDoc(branchMetaRef);
+
+    if (!branchSnap.exists()) {
+      throw new Error(`Branch '${branchName}' does not exist`);
+    }
+
+    setCurrentBranch(branchName);
+    console.log(`Switched to branch '${branchName}'`);
+  }, [user]);
+
+  // ブランチを削除
+  const deleteBranch = useCallback(async (branchName: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot delete branch: no user');
+    }
+
+    if (branchName === 'draft') {
+      throw new Error('Cannot delete the default draft branch');
+    }
+
+    if (branchName === currentBranch) {
+      throw new Error('Cannot delete the currently active branch');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const branchMetaRef = doc(db, 'projects', user.uid, 'branches', branchName);
+    const branchDataRef = doc(db, 'projects', user.uid, 'branches', branchName, 'data', 'current');
+
+    try {
+      // データとメタデータを削除
+      await setDoc(branchDataRef, {});
+      await setDoc(branchMetaRef, {});
+      console.log(`Branch '${branchName}' deleted successfully`);
+    } catch (error) {
+      console.error('Error deleting branch:', error);
+      throw error;
+    }
+  }, [user, currentBranch]);
+
+  // ブランチ一覧を取得
+  const listBranches = useCallback(async (): Promise<BranchInfo[]> => {
+    if (!user || !firebaseApp) {
+      return [];
+    }
+
+    const db = getFirestore(firebaseApp);
+    const branchesRef = collection(db, 'projects', user.uid, 'branches');
+    const querySnapshot = await getDocs(branchesRef);
+
+    const branches: BranchInfo[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.name) {
+        branches.push({
+          name: data.name,
+          createdAt: data.createdAt,
+          lastModified: data.lastModified,
+        });
+      }
+    });
+
+    return branches.sort((a, b) => {
+      if (a.name === 'draft') return -1;
+      if (b.name === 'draft') return 1;
+      return a.name.localeCompare(b.name);
     });
   }, [user]);
+
+  // ブランチをマージ（現在のブランチに別ブランチのデータを上書き）
+  const mergeBranch = useCallback(async (sourceBranchName: string) => {
+    if (!user || !firebaseApp) {
+      throw new Error('Cannot merge branch: no user');
+    }
+
+    const db = getFirestore(firebaseApp);
+    const sourceBranchDataRef = doc(db, 'projects', user.uid, 'branches', sourceBranchName, 'data', 'current');
+    const sourceBranchDataSnap = await getDoc(sourceBranchDataRef);
+
+    if (!sourceBranchDataSnap.exists()) {
+      throw new Error(`Source branch '${sourceBranchName}' has no data`);
+    }
+
+    const sourceData = ensureDataCompleteness(sourceBranchDataSnap.data() as Partial<ProjectData>);
+    
+    // 現在のブランチに上書き
+    const currentBranchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+    await setDoc(currentBranchDataRef, sourceData);
+    
+    // 現在のブランチのlastModifiedを更新
+    const branchMetaRef = doc(db, 'projects', user.uid, 'branches', currentBranch);
+    await updateDoc(branchMetaRef, { lastModified: serverTimestamp() });
+
+    setProjectData(sourceData);
+    await saveProjectDataToDB(sourceData);
+
+    // バージョン（マージコミット）として保存
+    const versionsRef = collection(db, 'projects', user.uid, 'versions');
+    // 現在ブランチのHEAD
+    const versionsAllSnap = await getDocs(query(versionsRef, orderBy('createdAt', 'desc')));
+    let currentHead: string | null = null;
+    let sourceHead: string | null = null;
+    for (const d of versionsAllSnap.docs) {
+      const v = d.data() as any;
+      if (!currentHead && v.branch === currentBranch) currentHead = d.id;
+      if (!sourceHead && v.branch === sourceBranchName) sourceHead = d.id;
+      if (currentHead && sourceHead) break;
+    }
+    await addDoc(versionsRef, {
+      ...sourceData,
+      createdAt: serverTimestamp(),
+      note: `Merge '${sourceBranchName}' into '${currentBranch}'`,
+      branch: currentBranch,
+      parentId: currentHead || null,
+      mergeParentId: sourceHead || null,
+      type: 'merge',
+    });
+
+    console.log(`Branch '${sourceBranchName}' merged into '${currentBranch}'`);
+  }, [user, currentBranch]);
 
   const setData = useCallback(async (data: Partial<ProjectData>) => {
     const completeData = ensureDataCompleteness(data);
@@ -138,10 +589,10 @@ export const useProjectData = () => {
     await saveProjectDataToDB(completeData);
     if (user && firebaseApp) {
         const db = getFirestore(firebaseApp);
-        const docRef = doc(db, 'projects', user.uid);
-        await setDoc(docRef, completeData);
+        const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+        await setDoc(branchDataRef, completeData);
     }
-  }, [user]);
+  }, [user, currentBranch]);
 
   const resetProjectData = useCallback(async () => {
     const initialData = getInitialData();
@@ -149,10 +600,10 @@ export const useProjectData = () => {
     await saveProjectDataToDB(initialData);
      if (user && firebaseApp) {
         const db = getFirestore(firebaseApp);
-        const docRef = doc(db, 'projects', user.uid);
-        await setDoc(docRef, initialData);
+        const branchDataRef = doc(db, 'projects', user.uid, 'branches', currentBranch, 'data', 'current');
+        await setDoc(branchDataRef, initialData);
     }
-  }, [user]);
+  }, [user, currentBranch]);
 
   const updateProjectName = useCallback((name: string) => {
     updateAndPersistData(prev => ({...prev, projectName: name}));
@@ -368,6 +819,18 @@ export const useProjectData = () => {
     updateAndPersistData(prev => ({...prev, scenes: prev.scenes.filter(s => s.id !== id)}));
   }, [updateAndPersistData]);
 
+  const reorderScenes = useCallback((fromIndex: number, toIndex: number) => {
+    updateAndPersistData(prev => {
+      const newScenes = [...prev.scenes];
+      if (fromIndex < 0 || fromIndex >= newScenes.length || toIndex < 0 || toIndex >= newScenes.length) {
+        return prev;
+      }
+      const [movedScene] = newScenes.splice(fromIndex, 1);
+      newScenes.splice(toIndex, 0, movedScene);
+      return {...prev, scenes: newScenes};
+    });
+  }, [updateAndPersistData]);
+
   const addSceneEvent = useCallback((sceneId: string, type: EventType, index?: number) => {
     if(!projectData) return;
     const newEvent: Partial<SceneEvent> = { id: `event-${Date.now()}`, type };
@@ -474,6 +937,9 @@ export const useProjectData = () => {
 
   return {
     projectData,
+    currentBranch,
+    detachedHead,
+    hasUnsavedChanges,
     setData,
     resetProjectData,
     updateProjectName,
@@ -483,6 +949,7 @@ export const useProjectData = () => {
     addScene,
     updateScene,
     deleteScene,
+    reorderScenes,
     addSceneEvent,
     addSceneEvents,
     updateSceneEvent,
@@ -490,6 +957,19 @@ export const useProjectData = () => {
     addRelationship,
     updateRelationship,
     deleteRelationship,
-    addAsset
+    addAsset,
+    // バージョン管理
+    saveVersion,
+    loadLatestVersion,
+    loadVersion,
+    checkoutVersion,
+    getVersionHistory,
+    deleteVersion,
+    // ブランチ管理
+    createBranch,
+    switchBranch,
+    deleteBranch,
+    listBranches,
+    mergeBranch,
   };
 };

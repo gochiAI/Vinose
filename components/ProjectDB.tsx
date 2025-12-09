@@ -1,4 +1,3 @@
-
 import React, { useRef, useState } from 'react';
 import { ProjectData, DbItemType, AssetType, Asset } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
@@ -228,7 +227,7 @@ export const ProjectDB: React.FC<ProjectDBProps> = ({ projectData, onEditItem, o
     };
 
   return (
-    <aside className={`fixed md:relative z-20 h-full w-[90vw] max-w-sm md:w-64 bg-card p-2 border-r border-border flex-shrink-0 flex flex-col transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`} data-tour-id="sidebar">
+    <aside className={`${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} fixed md:static z-20 h-full w-[90vw] max-w-sm md:w-64 bg-card p-2 border-r border-border flex-shrink-0 flex flex-col transition-transform duration-300 ease-in-out`} data-tour-id="sidebar">
        <div className="flex justify-between items-center flex-shrink-0">
           <h2 className="text-lg font-semibold p-2 select-none">{t('projectDB', language)}</h2>
           <button onClick={onCloseSidebar} className="md:hidden p-2 rounded-full hover:bg-secondary">

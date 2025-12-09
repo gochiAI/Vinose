@@ -8,7 +8,6 @@ import { useSettings } from '../contexts/SettingsContext';
 import { ContextMenuItem } from './ui/ContextMenu';
 import { Minimap } from './Minimap';
 import { MapIcon } from './icons/MapIcon';
-import { useKeyboardShortcuts, ShortcutMap } from '../hooks/useKeyboardShortcuts';
 
 interface CharacterGraphProps {
   characters: Character[];
@@ -315,24 +314,6 @@ export const CharacterGraph: React.FC<CharacterGraphProps> = ({ characters, rela
         setFocusedNodeId(bestCandidateId);
     }
   }, [focusedNodeId, nodePositions, characters, setFocusedNodeId]);
-
-  const shortcutHandlers: ShortcutMap = useMemo(() => ({
-      NEW_CHARACTER: onAddCharacter,
-      DELETE_NODE: () => focusedNodeId && onDeleteCharacter(focusedNodeId),
-      EDIT_NODE: () => focusedNodeId && onEditCharacter(focusedNodeId),
-      NAV_UP: () => findNextNode('up'),
-      NAV_DOWN: () => findNextNode('down'),
-      NAV_LEFT: () => findNextNode('left'),
-      NAV_RIGHT: () => findNextNode('right'),
-      ZOOM_IN: () => handleZoom('in'),
-      ZOOM_OUT: () => handleZoom('out'),
-      PAN_VIEW_UP: () => handlePan(0, 50),
-      PAN_VIEW_DOWN: () => handlePan(0, -50),
-      PAN_VIEW_LEFT: () => handlePan(50, 0),
-      PAN_VIEW_RIGHT: () => handlePan(-50, 0),
-  }), [onAddCharacter, onDeleteCharacter, onEditCharacter, focusedNodeId, findNextNode]);
-
-  useKeyboardShortcuts(shortcutHandlers);
 
   return (
     <div className="flex-1 relative" data-tour-id="character-graph-view">

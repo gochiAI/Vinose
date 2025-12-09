@@ -348,7 +348,7 @@ User Request: ${aiPrompt}
                 onPromptChange={setAiPrompt}
                 onSubmit={handleGenerateDescription}
                 isLoading={isLoading}
-                isAvailable={!!process.env.API_KEY}
+                isAvailable={!!localStorage.getItem("apiKey")}
                 result={aiResult}
                 onInsert={handleInsertDescription}
                 insertButtonText={t('append', language)}

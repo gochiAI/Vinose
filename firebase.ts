@@ -1,6 +1,6 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
 let firebaseApp: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -15,6 +15,17 @@ try {
       firebaseApp = initializeApp(firebaseConfig);
       auth = getAuth(firebaseApp);
       db = getFirestore(firebaseApp);
+      
+      // オフライン永続化を有効化
+      if (db) {
+        enableIndexedDbPersistence(db).catch((err) => {
+          if (err.code === 'failed-precondition') {
+            console.warn('複数のタブが開いているため、永続化は最初のタブでのみ有効です');
+          } else if (err.code === 'unimplemented') {
+            console.warn('ブラウザが永続化をサポートしていません');
+          }
+        });
+      }
     }
   }
 } catch (e) {
