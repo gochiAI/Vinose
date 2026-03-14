@@ -1,0 +1,79 @@
+import sqlite3 from 'sqlite3';
+import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const DB_PATH = join(__dirname, '../../vinose.db');
+
+export class Database {
+  private db: sqlite3.Database;
+
+  constructor() {
+    this.db = new sqlite3.Database(DB_PATH, (err) => {
+      if (err) {
+        console.error('[Database] Connection error:', err);
+      } else {
+        
+      }
+    });
+    
+    // Enable foreign keys
+    this.db.run('PRAGMA foreign_keys = ON');
+  }
+
+  async run(sql: string, params: any[] = []): Promise<{ lastID: number; changes: number }> {
+    return new Promise((resolve, reject) => {
+      this.db.run(sql, params, function(err) {
+        if (err) reject(err);
+        else resolve({ lastID: this.lastID, changes: this.changes });
+      });
+    });
+  }
+
+  async get<T>(sql: string, params: any[] = []): Promise<T | undefined> {
+    return new Promise((resolve, reject) => {
+      this.db.get(sql, params, (err, row) => {
+        if (err) reject(err);
+        else resolve(row as T | undefined);
+      });
+    });
+  }
+
+  async all<T>(sql: string, params: any[] = []): Promise<T[]> {
+    return new Promise((resolve, reject) => {
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          console.error('[Database.all] Error:', err);
+          console.error('[Database.all] SQL:', sql);
+          console.error('[Database.all] Params:', params);
+          reject(err);
+        } else {
+          resolve((rows || []) as T[]);
+        }
+      });
+    });
+  }
+
+  async exec(sql: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.exec(sql, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  close(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.close((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+}
+
+export const db = new Database();
