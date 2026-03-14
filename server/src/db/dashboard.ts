@@ -1,4 +1,4 @@
-import { db } from './connection';
+import { db } from './connection.js';
 
 export interface DashboardStats {
   totalWords: number;
@@ -22,61 +22,75 @@ export interface DashboardStats {
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  console.log('[getDashboardStats] Starting...');
   
-  // Count total words from all files
-  const wordCountRow = await db.get(
-    `SELECT COALESCE(SUM(CAST(json_extract(content, '$.totalWords') AS INTEGER)), 0) as totalWords
-     FROM files WHERE type = 'sheet'`
+  
+  // Count total words from all scene nodes' scripts
+  const wordCountRow = await db.get<any>(
+    `SELECT COALESCE(SUM(
+       LENGTH(script) - LENGTH(REPLACE(script, ' ', '')) + 1
+     ), 0) as totalWords
+     FROM scene_nodes
+     WHERE script IS NOT NULL AND script != ''`
   );
-  console.log('[getDashboardStats] wordCountRow:', wordCountRow);
+  
 
-  // Words added in the last 7 days (sum of sheet totals touched in that window)
-  const weeklyWordsRow = await db.get(
-    `SELECT COALESCE(SUM(CAST(json_extract(content, '$.totalWords') AS INTEGER)), 0) as weeklyWordsAdded
-     FROM files
-     WHERE type = 'sheet'
+  // Words added in the last 7 days
+  const weeklyWordsRow = await db.get<any>(
+    `SELECT COALESCE(SUM(
+       LENGTH(script) - LENGTH(REPLACE(script, ' ', '')) + 1
+     ), 0) as weeklyWordsAdded
+     FROM scene_nodes
+     WHERE script IS NOT NULL AND script != ''
        AND datetime(updated_at) >= datetime('now', '-7 days')`
   );
-  console.log('[getDashboardStats] weeklyWordsRow:', weeklyWordsRow);
+  
 
   // Count assets
-  const assetCountRow = await db.get(`SELECT COUNT(*) as count FROM assets`);
-  console.log('[getDashboardStats] assetCountRow:', assetCountRow);
+  const assetCountRow = await db.get<any>(`SELECT COUNT(*) as count FROM assets`);
+  
 
-  // Get chapter count (as compile count)
-  const chapterCountRow = await db.get(`SELECT COUNT(*) as count FROM chapters`);
-  console.log('[getDashboardStats] chapterCountRow:', chapterCountRow);
+  // Get scene count (as compile count)
+  const sceneCountRow = await db.get<any>(`SELECT COUNT(*) as count FROM scene_nodes`);
+  
 
-  // Calculate completion percentage (based on chapters with completed status)
-  const completionRow = await db.get(
+  // Calculate completion percentage (based on chapters with episodes)
+  const completionRow = await db.get<any>(
     `SELECT CAST(
-       COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / 
+       COUNT(CASE WHEN EXISTS (
+         SELECT 1 FROM episodes WHERE chapter_id = chapters.id
+       ) THEN 1 END) * 100.0 / 
        NULLIF(COUNT(*), 0)
      AS INTEGER) as percentage
      FROM chapters`
   );
-  console.log('[getDashboardStats] completionRow:', completionRow);
+  
 
-  // Get recent chapters (up to 5)
-  const recentChapters = await db.all(
-    `SELECT id, title, title as sceneId, status, updated_at as edited
-     FROM chapters
-     ORDER BY updated_at DESC
+  // Get recent episodes with scene counts (up to 5)
+  const recentChapters = await db.all<any>(
+    `SELECT 
+       e.id, 
+       e.title, 
+       COUNT(sn.id) || ' scenes' as sceneId,
+       e.status,
+       e.updated_at as edited
+     FROM episodes e
+     LEFT JOIN scene_nodes sn ON sn.episode_id = e.id
+     GROUP BY e.id, e.title, e.status, e.updated_at
+     ORDER BY e.updated_at DESC
      LIMIT 5`
   );
 
   // Get recent assets (up to 4)
-  const recentAssets = await db.all(
+  const recentAssets = await db.all<any>(
     `SELECT id, name, type, url FROM assets ORDER BY updated_at DESC LIMIT 4`
   );
 
   return {
-    totalWords: wordCountRow?.totalWords || 0,
-    weeklyWordsAdded: weeklyWordsRow?.weeklyWordsAdded || 0,
-    assetCount: assetCountRow?.count || 0,
-    compileCount: `v${chapterCountRow?.count || 0}`,
-    completionPercentage: completionRow?.percentage || 0,
+    totalWords: (wordCountRow as any)?.totalWords || 0,
+    weeklyWordsAdded: (weeklyWordsRow as any)?.weeklyWordsAdded || 0,
+    assetCount: (assetCountRow as any)?.count || 0,
+    compileCount: `v${(sceneCountRow as any)?.count || 0}`,
+    completionPercentage: (completionRow as any)?.percentage || 0,
     recentChapters: recentChapters.map((ch: any) => ({
       id: ch.id,
       title: ch.title,

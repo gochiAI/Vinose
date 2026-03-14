@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SceneNode, Block, BlockType } from '../../types';
-import { initialCharacters, initialAssets } from '../../data';
+import { SceneNode, Block, ExtendedCharacter, Asset } from '../../types';
 import { MessageSquare, AlignLeft, GitFork, Trash2, GripVertical, ArrowRightCircle, MonitorPlay } from 'lucide-react';
 
 import { DialogueBlock } from './script-blocks/DialogueBlock';
@@ -10,18 +9,19 @@ import { TransitionBlock } from './script-blocks/TransitionBlock';
 import { ChoiceBlock } from './script-blocks/ChoiceBlock';
 
 interface ScriptEditorProps {
-  node: SceneNode;
+  node?: SceneNode;
   allNodes: SceneNode[]; // Need access to other nodes for linking
-  onUpdate: (text: string) => void;
+  onUpdate: (blocks: Block[]) => void;
   onClose: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   isInspectorOpen: boolean;
   onToggleInspector: () => void;
+  characters: ExtendedCharacter[];
+  assets: Asset[];
 }
 
-export const ScriptEditor = ({ node, allNodes, onUpdate, onClose, isFullscreen, onToggleFullscreen, isInspectorOpen, onToggleInspector }: ScriptEditorProps) => {
-  // Early return if node is not loaded yet (BEFORE all hooks)
+export const ScriptEditor = ({ node, allNodes, onUpdate, onClose, isFullscreen, onToggleFullscreen, isInspectorOpen, onToggleInspector, characters, assets }: ScriptEditorProps) => {
   if (!node) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -30,133 +30,32 @@ export const ScriptEditor = ({ node, allNodes, onUpdate, onClose, isFullscreen, 
     );
   }
 
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  
-  // -- Initialization --
-  const prevIdRef = React.useRef(node?.id);
-  
-  // -- Parsing / Serialization --
-  
-  const parseScript = (script: string): Block[] => {
-    if (!script) return [];
-    
-    const chunks = script.split(/\n\n+/);
-    return chunks.map((chunk, index) => {
-      const trimmed = chunk.trim();
-      const id = `${index}-${Date.now()}`;
-      
-      if (trimmed.startsWith('[BGM:')) {
-        const match = trimmed.match(/\[BGM: (.*?)\]/);
-        return { id, type: 'media', content: { subType: 'bgm', asset: match ? match[1] : '' } };
-      }
-
-      if (trimmed.startsWith('[BG:')) {
-        const match = trimmed.match(/\[BG: (.*?)\]/);
-        return { id, type: 'media', content: { subType: 'bg', asset: match ? match[1] : '' } };
-      }
-
-      if (trimmed.startsWith('[GOTO:')) {
-        const match = trimmed.match(/\[GOTO: (.*?)\]/);
-        return { id, type: 'transition', content: { target: match ? match[1] : '' } };
-      }
-      
-      if (trimmed.startsWith('[CHOICE]')) {
-        const lines = trimmed.split('\n').slice(1);
-        const options = lines.map(line => {
-           // Parse "Label => Target" OR "[IF: cond] => Target"
-           const parts = line.split('=>');
-           const left = parts[0].trim();
-           const right = parts[1] ? parts[1].trim() : '';
-
-           let type = 'user';
-           let text = left;
-           
-           // Check for condition
-           if (left.startsWith('[IF:')) {
-             type = 'condition';
-             text = left.replace(/^\[IF:\s*(.*?)\]$/, '$1');
-           } else {
-             // Clean numbering if present e.g. "1. Option"
-             text = left.replace(/^\d+\.\s*/, '');
-           }
-
-           return { type: type as any, text, target: right };
-        });
-        return { id, type: 'choice', content: { options } };
-      }
-      
-      const lines = trimmed.split('\n');
-      if (lines.length > 1) {
-          const firstLine = lines[0].trim();
-          const charMatch = initialCharacters.find(c => c.name.toUpperCase() === firstLine.toUpperCase());
-          if (charMatch || (firstLine === firstLine.toUpperCase() && firstLine.length > 0 && !firstLine.startsWith('(') && !firstLine.startsWith('['))) {
-             return { 
-               id, 
-               type: 'dialogue', 
-               content: { 
-                 character: charMatch ? charMatch.name : firstLine,
-                 text: lines.slice(1).join('\n') 
-               } 
-             };
-          }
-      }
-
-      return { id, type: 'narrate', content: { text: trimmed } };
-    });
-  };
-
-  const serializeScript = (currentBlocks: Block[]): string => {
-    return currentBlocks.map(b => {
-      if (b.type === 'dialogue') {
-        return `${b.content.character.toUpperCase()}\n${b.content.text}`;
-      }
-      if (b.type === 'narrate') {
-        return b.content.text;
-      }
-      if (b.type === 'media') {
-        if (b.content.subType === 'bgm') return `[BGM: ${b.content.asset}]`;
-        return `[BG: ${b.content.asset}]`;
-      }
-      if (b.type === 'transition') {
-        return `[GOTO: ${b.content.target}]`;
-      }
-      if (b.type === 'choice') {
-        const optionLines = b.content.options.map((opt: any, i: number) => {
-           const targetPart = opt.target ? ` => ${opt.target}` : '';
-           if (opt.type === 'condition') {
-             return `[IF: ${opt.text}]${targetPart}`;
-           }
-           return `${i+1}. ${opt.text}${targetPart}`;
-        });
-        return `[CHOICE]\n${optionLines.join('\n')}`;
-      }
-      return '';
-    }).join('\n\n');
-  };
+  const [blocks, setBlocks] = useState<Block[]>(Array.isArray(node.script) ? node.script : []);
 
   useEffect(() => {
-    if (!node) return;
-    if (prevIdRef.current !== node.id || blocks.length === 0) {
-      setBlocks(parseScript(node.script || ''));
-      prevIdRef.current = node.id;
-    }
-  }, [node?.id, node?.script]);
+    setBlocks(Array.isArray(node.script) ? node.script : []);
+  }, [node.id, node.script]);
 
   const updateBlocks = (newBlocks: Block[]) => {
     setBlocks(newBlocks);
-    onUpdate(serializeScript(newBlocks));
+    onUpdate(newBlocks);
   };
 
+  type BlockType = Block['type'];
+
   const addBlock = (type: BlockType) => {
-    const newBlock: Block = {
-      id: Date.now().toString(),
-      type,
-      content: type === 'dialogue' ? { character: initialCharacters[0]?.name || 'Unknown', text: '' }
-             : type === 'media' ? { subType: 'bg', asset: '' }
-             : type === 'transition' ? { target: '' }
-             : type === 'choice' ? { options: [{type: 'user', text: 'Option 1', target: ''}] }
-             : { text: '' }
-    };
+    const id = Date.now().toString();
+    const newBlock: Block =
+      type === 'dialogue'
+        ? { id, type, content: { characterId: characters[0]?.id || '', text: '' } }
+        : type === 'narrate'
+          ? { id, type, content: { text: '' } }
+          : type === 'media'
+            ? { id, type, content: { assetId: '', category: 'background' } }
+            : type === 'choice'
+              ? { id, type, content: { options: [{ type: 'user', text: '', target: '' }] } }
+              : { id, type: 'move', content: { targetNodeId: '' } };
+
     updateBlocks([...blocks, newBlock]);
   };
 
@@ -168,7 +67,7 @@ export const ScriptEditor = ({ node, allNodes, onUpdate, onClose, isFullscreen, 
 
   const updateBlockContent = (index: number, content: any) => {
     const newBlocks = [...blocks];
-    newBlocks[index] = { ...newBlocks[index], content };
+    newBlocks[index] = { ...newBlocks[index], content } as Block;
     updateBlocks(newBlocks);
   };
 
@@ -209,8 +108,8 @@ export const ScriptEditor = ({ node, allNodes, onUpdate, onClose, isFullscreen, 
             <span className="text-xs font-bold">Choice</span>
           </button>
 
-          <button 
-             onClick={() => addBlock('transition')}
+           <button 
+             onClick={() => addBlock('move')}
              className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md hover:bg-red-500/20 text-gray-300 hover:text-red-300 transition-colors border border-transparent hover:border-red-500/30"
           >
             <ArrowRightCircle size={16} className="text-red-500" />
@@ -256,11 +155,11 @@ export const ScriptEditor = ({ node, allNodes, onUpdate, onClose, isFullscreen, 
                   <button onClick={() => deleteBlock(i)} className="text-gray-600 hover:text-red-400 p-1"><Trash2 size={14} /></button>
                </div>
                
-               {block.type === 'dialogue' && <DialogueBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} />}
-               {block.type === 'narrate' && <NarrateBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} />}
-               {block.type === 'media' && <MediaBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} />}
-               {block.type === 'transition' && <TransitionBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} allNodes={allNodes} currentNodeId={node.id} />}
-               {block.type === 'choice' && <ChoiceBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} allNodes={allNodes} currentNodeId={node.id} />}
+              {block.type === 'dialogue' && <DialogueBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} characters={characters} />}
+              {block.type === 'narrate' && <NarrateBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} />}
+              {block.type === 'media' && <MediaBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} assets={assets} />}
+              {block.type === 'move' && <TransitionBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} allNodes={allNodes} currentNodeId={node.id} />}
+              {block.type === 'choice' && <ChoiceBlock content={block.content} onChange={(c) => updateBlockContent(i, c)} allNodes={allNodes} currentNodeId={node.id} />}
             </div>
          ))}
       </div>

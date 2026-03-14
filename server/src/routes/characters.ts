@@ -1,5 +1,5 @@
 import express, { Request, Response, Router } from 'express';
-import * as charactersDb from '../db/characters';
+import * as charactersDb from '../db/characters.js';
 
 const router = Router();
 

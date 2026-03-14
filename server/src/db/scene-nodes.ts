@@ -1,68 +1,77 @@
-import { db } from './connection';
+import { db } from "./connection";
+import type { SceneNode } from "../types";
 
-export interface SceneNode {
-  id: string;
-  chapterId: string;
-  title: string;
-  type: 'dialogue' | 'narration' | 'choice' | 'branch';
-  script: string;
-  background: string;
-  bgm: string;
-  sfx: string;
-  flags: Record<string, any>;
-  nextIds: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+export async function getSceneNodes(
+  chapterId?: string,
+  episodeId?: string,
+): Promise<SceneNode[]> {
+  // 1. Remove the hardcoded WHERE and ORDER BY clauses here
+  let query = `SELECT id, chapter_id, episode_id, title, type, summary, script, flags, next_ids, created_at, updated_at
+   FROM scene_nodes`;
+  
+  const params: string[] = [];
+  const conditions: string[] = [];
 
-export async function getNodesForChapter(chapterId: string): Promise<SceneNode[]> {
-  console.log('[DB] getNodesForChapter - chapterId:', chapterId);
-  const rows = await db.all(
-    `SELECT id, chapter_id, title, type, script, background, bgm, sfx, flags, next_ids, created_at, updated_at
-     FROM scene_nodes WHERE chapter_id = ? ORDER BY created_at ASC`,
-    [chapterId]
-  );
-  console.log('[DB] getNodesForChapter - found', rows.length, 'rows');
+  // 2. Build conditions dynamically (This logic was already correct)
+  if (chapterId) {
+    conditions.push("chapter_id = ?");
+    params.push(chapterId);
+  }
+
+  if (episodeId) {
+    conditions.push("episode_id = ?");
+    params.push(episodeId);
+  }
+
+  // 3. Append WHERE only if needed
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+
+  // 4. Append ORDER BY at the very end
+  query += " ORDER BY order_index ASC, created_at ASC";
+
+  const rows = await db.all(query, params);
 
   return rows.map((row: any) => ({
     id: row.id,
     chapterId: row.chapter_id,
+    episodeId: row.episode_id,
     title: row.title,
     type: row.type,
+    summary: row.summary,
     script: row.script,
-    background: row.background,
-    bgm: row.bgm,
-    sfx: row.sfx,
-    flags: JSON.parse(row.flags || '{}'),
-    nextIds: JSON.parse(row.next_ids || '[]'),
+    flags: JSON.parse(row.flags || "{}"),
+    nextIds: JSON.parse(row.next_ids || "[]"),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
 }
 
-export async function getSceneNode(id: string): Promise<SceneNode | null> {
-  const row = await db.get(
-    `SELECT id, chapter_id, title, type, script, background, bgm, sfx, flags, next_ids, created_at, updated_at
-     FROM scene_nodes WHERE id = ?`,
-    [id]
+export async function getUnassignedNodes(
+  chapterId: string,
+): Promise<SceneNode[]> {
+  const rows = await db.all(
+    `SELECT id, chapter_id, episode_id, title, type, summary, script, flags, next_ids, order_index, created_at, updated_at
+     FROM scene_nodes
+     WHERE chapter_id = ? AND episode_id IS NULL
+     ORDER BY order_index ASC, created_at ASC`,
+    [chapterId],
   );
 
-  if (!row) return null;
-
-  return {
+  return rows.map((row: any) => ({
     id: row.id,
     chapterId: row.chapter_id,
+    episodeId: row.episode_id,
     title: row.title,
     type: row.type,
+    summary: row.summary,
     script: row.script,
-    background: row.background,
-    bgm: row.bgm,
-    sfx: row.sfx,
-    flags: JSON.parse(row.flags || '{}'),
-    nextIds: JSON.parse(row.next_ids || '[]'),
+    flags: JSON.parse(row.flags || "{}"),
+    nextIds: JSON.parse(row.next_ids || "[]"),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  }));
 }
 
 export async function saveSceneNode(node: SceneNode): Promise<string> {
@@ -71,22 +80,21 @@ export async function saveSceneNode(node: SceneNode): Promise<string> {
 
   await db.run(
     `INSERT OR REPLACE INTO scene_nodes 
-     (id, chapter_id, title, type, script, background, bgm, sfx, flags, next_ids, created_at, updated_at)
+     (id, chapter_id, episode_id, title, type, summary, script, flags, next_ids, order_index, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       node.id,
       node.chapterId,
+      node.episodeId || null,
       node.title,
       node.type,
+      node.summary,
       node.script,
-      node.background,
-      node.bgm,
-      node.sfx,
       JSON.stringify(node.flags),
       JSON.stringify(node.nextIds),
       createdAt,
       now,
-    ]
+    ],
   );
 
   return node.id;

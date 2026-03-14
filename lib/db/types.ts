@@ -1,16 +1,26 @@
-import { SceneNode, ExtendedCharacter, Asset, ScenarioEvent, FileItem, Chapter, ProjectInfo } from '../../types';
+import { SceneNode,Episode,ExtendedCharacter, Asset, FileItem, Chapter, ProjectInfo } from '../../types';
 
 export interface DatabaseAdapter {
   // Projects / Meta
   getProjectInfo(): Promise<ProjectInfo | null>;
   updateProjectInfo(name: string, description?: string): Promise<ProjectInfo>;
   
-  // Scenes & Chapters
+  // Chapters / Episodes / Nodes
   getChapters(): Promise<Chapter[]>;
-  getNodesForChapter(chapterId: string): Promise<SceneNode[]>;
-  saveNode(node: SceneNode): Promise<void>;
-  createNode(node: SceneNode): Promise<void>;
+  getChapter(id: string): Promise<Chapter | null>;
   saveChapter(chapter: Chapter): Promise<void>;
+  deleteChapter(id: string): Promise<void>;
+  
+  getEpisodes(chapterId: string): Promise<Episode[]>;
+  createEpisode(episode: Episode): Promise<string>;
+  saveEpisode(episode: Episode): Promise<void>;
+  updateEpisode(id: string, episode: Episode): Promise<void>;
+  deleteEpisode(id: string): Promise<void>;
+
+  getSceneNodes(episodeId?: string): Promise<SceneNode[]>;
+  getNodesForChapter(chapterId: string): Promise<SceneNode[]>;
+  saveSceneNode(node: SceneNode): Promise<void>;
+  deleteSceneNode(id: string): Promise<void>;
   
   // Characters
   getCharacters(): Promise<ExtendedCharacter[]>;
@@ -22,15 +32,10 @@ export interface DatabaseAdapter {
   saveAsset(asset: Asset): Promise<void>;
   deleteAsset(id: string): Promise<void>;
 
-  // Events (Scenarios)
-  getEvents(): Promise<ScenarioEvent[]>;
-  saveEvent(event: ScenarioEvent): Promise<void>;
-  deleteEvent(id: string): Promise<void>;
-
   // Documents
   getFiles(): Promise<FileItem[]>;
   saveFile(file: FileItem): Promise<void>;
-
+  deleteFile(id: string): Promise<void>;
   // Dashboard
   getDashboardStats(): Promise<any>;
 

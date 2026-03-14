@@ -147,9 +147,7 @@ DELETE /api/files/:id           # ファイルを削除
    - id, title, scene_count
    - status, last_edited
 
-6. **scenario_events** - シナリオイベント
-   - id, timing, event_name, details
-   - characters, visuals, notes, status
+
 
 7. **project_meta** - プロジェクトメタデータ
    - key, value, updated_at

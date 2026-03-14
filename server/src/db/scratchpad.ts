@@ -1,4 +1,4 @@
-import { db } from './connection';
+import { db } from './connection.js';
 
 export interface ScratchpadItem {
   id: string;
@@ -10,7 +10,7 @@ export interface ScratchpadItem {
 
 export async function getScratchpadItems(): Promise<ScratchpadItem[]> {
   // project_meta only has key/value/updated_at; use updated_at for ordering
-  const rows = await db.all(`
+  const rows = await db.all<any>(`
     SELECT key, value, updated_at
     FROM project_meta
     WHERE key LIKE 'scratchpad_%'
@@ -30,7 +30,7 @@ export async function getScratchpadItems(): Promise<ScratchpadItem[]> {
 }
 
 export async function getScratchpadItem(id: string): Promise<ScratchpadItem | null> {
-  const row = await db.get(
+  const row = await db.get<any>(
     `SELECT value, updated_at FROM project_meta WHERE key = ?`,
     [`scratchpad_${id}`]
   );

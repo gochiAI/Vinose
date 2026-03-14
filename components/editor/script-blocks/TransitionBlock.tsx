@@ -4,7 +4,7 @@ import { SceneNode } from '../../../types';
 
 interface TransitionBlockProps {
   content: {
-    target: string;
+    targetNodeId: string;
   };
   onChange: (content: any) => void;
   allNodes: SceneNode[];
@@ -21,8 +21,8 @@ export const TransitionBlock = ({ content, onChange, allNodes, currentNodeId }: 
           <label className="text-[10px] text-red-300 font-bold uppercase tracking-wider">Move Scene</label>
           <select
              className="w-full bg-surface-darker/50 rounded text-white text-sm border border-red-900/50 p-2 focus:ring-0 font-medium"
-             value={content.target}
-             onChange={(e) => onChange({ ...content, target: e.target.value })}
+             value={content.targetNodeId}
+             onChange={(e) => onChange({ ...content, targetNodeId: e.target.value })}
           >
              <option value="">(Select Target Scene)</option>
              {allNodes.filter(n => n.id !== currentNodeId).map(n => (

@@ -1,5 +1,5 @@
 import express, { Request, Response, Router } from 'express';
-import * as assetsDb from '../db/assets';
+import * as assetsDb from '../db/assets.js';
 
 const router = Router();
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { SceneNode } from '../../types';
-import { initialCharacters, initialAssets } from '../../data';
 import { X, Play, RotateCcw } from 'lucide-react';
 
 interface PlaytestOverlayProps {
@@ -36,7 +35,7 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
 
    // Parse script into simple lines when node changes
    useEffect(() => {
-      console.log('[Playtest] Node changed:', currentNodeId, currentNode?.title);
+      
 
       // いったん停止状態にしてから初期化
       setCanProcess(false);
@@ -46,7 +45,7 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
 
       if (currentNode?.script) {
          const parsedLines = currentNode.script.split('\n').filter(l => l.trim() !== '');
-         console.log('[Playtest] Parsed lines:', parsedLines.length, parsedLines);
+         
          setLines(parsedLines);
          setCanProcess(true);
          // 背景とBGMを引き継ぐ
@@ -62,17 +61,17 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
    // Execute current line
    useEffect(() => {
       if (!canProcess) {
-         console.log('[Playtest] Waiting for lines to be ready');
+         
          return;
       }
-      console.log('[Playtest] Execute line:', currentLineIndex, '/', lines.length);
+      
       if (lines.length === 0) return;
       if (currentLineIndex >= lines.length) {
-        console.log('[Playtest] End of scene, nextIds:', currentNode?.nextIds);
+        
         // シーンの終わり - nextIdsがあれば自動的に次のシーンへ
         if (currentNode?.nextIds && currentNode.nextIds.length > 0) {
           const nextNodeId = currentNode.nextIds[0];
-          console.log('[Playtest] Auto transitioning to:', nextNodeId);
+          
                setCanProcess(false);
                setCurrentLineIndex(0);
                setLines([]);
@@ -81,27 +80,27 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
           }, 1000);
           setGameState(prev => ({ ...prev, text: "(次のシーンへ...)", choices: [] }));
         } else {
-          console.log('[Playtest] Scene complete, no next nodes');
+          
           setGameState(prev => ({ ...prev, text: "(シーン終了)", choices: [] }));
         }
         return;
     }
 
     const line = lines[currentLineIndex].trim();
-    console.log('[Playtest] Processing line:', line);
+    
     
     // Command Processing
     if (line.startsWith('[')) {
       if (line.includes('BG:')) {
          const assetName = line.match(/\[BG: (.*?)\]/)?.[1];
-         const asset = initialAssets.find(a => a.name === assetName);
+         const asset = null; // Placeholder for background asset lookup
          if (asset) setGameState(prev => ({ ...prev, background: asset.url }));
          autoAdvance();
       } else if (line.includes('BGM:')) {
          // Placeholder for BGM
          autoAdvance();
       } else if (line.includes('CHOICE')) {
-         console.log('[Playtest] Found CHOICE command');
+         
          // Gather next lines as choices
          const choices = [];
          let i = currentLineIndex + 1;
@@ -115,7 +114,7 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
             }
             i++;
          }
-         console.log('[Playtest] Gathered choices:', choices);
+         
          setGameState(prev => ({ ...prev, choices, text: '' }));
          // 選択肢を表示中は停止（選択されるまで待つ）
          // Don't auto advance, wait for user input
@@ -174,7 +173,7 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
   };
 
    const handleChoiceSelect = (targetId: string) => {
-      console.log('[Playtest] Choice selected, target:', targetId);
+      
       // 即座に選択肢を非表示にする
       setGameState(prev => ({ ...prev, choices: [], text: '(シーン遷移中...)' }));
       setCanProcess(false);
@@ -182,13 +181,13 @@ export const PlaytestOverlay = ({ nodes, startNodeId, onClose }: PlaytestOverlay
       setLines([]);
       // 少し遅延させてから次のシーンへ
       setTimeout(() => {
-         console.log('[Playtest] Transitioning to:', targetId);
+         
          setCurrentNodeId(targetId);
       }, 300);
    };
 
   const handleRestart = () => {
-    console.log('[Playtest] Restart, startNodeId:', startNodeId || nodes[0]?.id);
+    
     setCurrentNodeId(startNodeId || nodes[0]?.id || '');
     setCurrentLineIndex(0);
     setGameState({

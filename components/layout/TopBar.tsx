@@ -131,13 +131,6 @@ export const TopBar = ({
           {view === "dashboard" && (
             <>
               <button
-                onClick={() => onAction("TEST_BUILD")}
-                className="flex items-center gap-2 h-10 px-6 rounded-lg bg-secondary hover:bg-[#a67d42] text-white text-sm font-bold shadow-lg shadow-secondary/10 transition-all active:scale-95"
-              >
-                <Play size={18} fill="currentColor" />
-                <span>Test Build</span>
-              </button>
-              <button
                 onClick={() => onAction("CONTINUE_EDITING")}
                 className="flex items-center gap-2 h-10 px-6 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-95"
               >
@@ -158,21 +151,21 @@ export const TopBar = ({
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <span
             className="hover:text-white cursor-pointer transition-colors"
-            onClick={() => onNavigate && onNavigate("chapterList")}
+            onClick={() => onNavigate && onNavigate("chapters")}
           >
-            {headerInfo?.title || "Project"}
+            {headerInfo?.chapter || "Chapter"}
           </span>
 
-          {(view === "chapter" || view === "editor") && (
+          {(view === "chapters" || view === "editor") && (
             <>
               <span className="material-symbols-outlined text-[16px]">
                 chevron_right
               </span>
               <span
                 className="hover:text-white cursor-pointer transition-colors"
-                onClick={() => onNavigate && onNavigate("chapter")}
-              >
-                {headerInfo?.chapter || "Chapter"}
+                onClick={() => onNavigate && onNavigate("chapters")}
+              > 
+              {headerInfo?.episode || "Episode"}
               </span>
             </>
           )}

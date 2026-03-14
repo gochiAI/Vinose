@@ -12,7 +12,7 @@ export { DataCache, SyncQueue } from './cache';
 export type { PersistenceConfig, CacheEntry } from './cache';
 
 // Database with persistence
-export { PersistentMockDatabase } from './persistent-mock-db';
+
 
 // Configuration
 export { getPersistenceSettings, defaultPersistenceSettings } from './config';

@@ -1,4 +1,4 @@
-import { db } from './connection';
+import { db } from './connection.js';
 
 export interface ProjectInfo {
   id: string;
@@ -9,8 +9,8 @@ export interface ProjectInfo {
 }
 
 export async function getProjectInfo(): Promise<ProjectInfo | null> {
-  console.log('[DB] getProjectInfo');
-  const row = await db.get(
+  
+  const row = await db.get<any>(
     `SELECT id, name, description, created_at, updated_at
      FROM project_info LIMIT 1`
   );
@@ -27,7 +27,7 @@ export async function getProjectInfo(): Promise<ProjectInfo | null> {
 }
 
 export async function updateProjectInfo(name: string, description?: string): Promise<ProjectInfo> {
-  console.log('[DB] updateProjectInfo - name:', name);
+  
   const now = new Date().toISOString();
   
   // Get existing project info or create new one

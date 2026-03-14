@@ -16,7 +16,7 @@ export class Database {
       if (err) {
         console.error('[Database] Connection error:', err);
       } else {
-        console.log('[Database] Connected to SQLite:', DB_PATH);
+        
       }
     });
     
@@ -45,8 +45,14 @@ export class Database {
   async all<T>(sql: string, params: any[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve((rows || []) as T[]);
+        if (err) {
+          console.error('[Database.all] Error:', err);
+          console.error('[Database.all] SQL:', sql);
+          console.error('[Database.all] Params:', params);
+          reject(err);
+        } else {
+          resolve((rows || []) as T[]);
+        }
       });
     });
   }

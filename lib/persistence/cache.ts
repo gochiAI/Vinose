@@ -3,7 +3,7 @@
  */
 
 import { DatabaseAdapter } from '../db/types';
-import { SceneNode, ExtendedCharacter, Asset, ScenarioEvent, FileItem, Chapter } from '../../types';
+import { SceneNode,Episode,ExtendedCharacter, Asset, FileItem, Chapter } from '../../types';
 import { PersistenceManager } from './storage';
 
 export interface PersistenceConfig {

@@ -16,7 +16,7 @@ export const SettingsPage = () => {
     const loadProjectInfo = async () => {
       try {
         const info = await db.getProjectInfo();
-        console.log('[SettingsPage] Loaded project info:', info);
+        
         setProjectInfo(info);
         setProjectName(info?.name || '');
       } catch (error) {
@@ -33,7 +33,7 @@ export const SettingsPage = () => {
     setSaveMessage('');
     try {
       const updated = await db.updateProjectInfo(projectName);
-      console.log('[SettingsPage] Updated project info:', updated);
+      
       setProjectInfo(updated);
       setSaveMessage('Project name saved successfully!');
       setTimeout(() => setSaveMessage(''), 3000);

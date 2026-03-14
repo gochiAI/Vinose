@@ -1,5 +1,13 @@
-import { DatabaseAdapter } from '../db/types';
-import { SceneNode, ExtendedCharacter, Asset, ScenarioEvent, FileItem, Chapter, ProjectInfo } from '../../types';
+import { DatabaseAdapter } from "../db/types";
+import {
+  SceneNode,
+  Episode,
+  ExtendedCharacter,
+  Asset,
+  FileItem,
+  Chapter,
+  ProjectInfo,
+} from "../../types";
 
 export interface SQLiteAdapterConfig {
   baseUrl: string;
@@ -13,15 +21,19 @@ export class SQLiteDatabaseAdapter implements DatabaseAdapter {
   constructor(config: SQLiteAdapterConfig) {
     this.baseUrl = config.baseUrl;
     this.timeout = config.timeout || 30000;
-    console.log('[SQLiteAdapter] baseUrl:', this.baseUrl);
+    console.log("[SQLiteAdapter] baseUrl:", this.baseUrl);
   }
 
-  private async request<T>(method: string, endpoint: string, data?: any): Promise<T> {
+  private async request<T>(
+    method: string,
+    endpoint: string,
+    data?: any,
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const options: RequestInit = {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     };
 
@@ -47,25 +59,34 @@ export class SQLiteDatabaseAdapter implements DatabaseAdapter {
 
       return await response.json();
     } catch (error) {
-      console.error(`[SQLiteAdapter] Request failed: ${method} ${endpoint}`, error);
+      console.error(
+        `[SQLiteAdapter] Request failed: ${method} ${endpoint}`,
+        error,
+      );
       throw error;
     }
   }
 
   async getProjectInfo(): Promise<ProjectInfo | null> {
     try {
-      return await this.request<ProjectInfo>('GET', '/api/project-info');
+      return await this.request<ProjectInfo>("GET", "/api/project-info");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch project info:', error);
+      console.warn("[SQLiteAdapter] Failed to fetch project info:", error);
       return null;
     }
   }
 
-  async updateProjectInfo(name: string, description?: string): Promise<ProjectInfo> {
+  async updateProjectInfo(
+    name: string,
+    description?: string,
+  ): Promise<ProjectInfo> {
     try {
-      return await this.request<ProjectInfo>('PUT', '/api/project-info', { name, description });
+      return await this.request<ProjectInfo>("PUT", "/api/project-info", {
+        name,
+        description,
+      });
     } catch (error) {
-      console.error('[SQLiteAdapter] Failed to update project info:', error);
+      console.error("[SQLiteAdapter] Failed to update project info:", error);
       throw error;
     }
   }
@@ -73,112 +94,179 @@ export class SQLiteDatabaseAdapter implements DatabaseAdapter {
   // --- Chapters & Nodes ---
   async getChapters(): Promise<Chapter[]> {
     try {
-      return await this.request<Chapter[]>('GET', '/api/chapters');
+      return await this.request<Chapter[]>("GET", "/api/chapters");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch chapters, returning empty:', error);
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch chapters, returning empty:",
+        error,
+      );
       return [];
     }
   }
-
-  async getNodesForChapter(chapterId: string): Promise<SceneNode[]> {
+  async getChapter(id: string): Promise<Chapter | null> {
     try {
-      return await this.request<SceneNode[]>('GET', `/api/scene-nodes/chapter/${chapterId}`);
+      return await this.request<Chapter>("GET", `/api/chapters/${id}`);
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch nodes, returning empty:', error);
-      return [];
+      console.warn("[SQLiteAdapter] Failed to fetch chapter:", error);
+      return null;
     }
-  }
-
-  async saveNode(node: SceneNode): Promise<void> {
-    await this.request('PUT', `/api/scene-nodes/${node.id}`, node);
-  }
-
-  async createNode(node: SceneNode): Promise<void> {
-    await this.request('POST', '/api/scene-nodes', node);
   }
 
   async saveChapter(chapter: Chapter): Promise<void> {
-    await this.request('POST', '/api/chapters', chapter);
+    await this.request("POST", "/api/chapters", chapter);
+  }
+
+  async deleteChapter(id: string): Promise<void> {
+    await this.request("DELETE", `/api/chapters/${id}`);
+  }
+
+  async getEpisodes(chapterId: string): Promise<Episode[]> {
+    try {
+      return await this.request<Episode[]>("GET", `/api/episodes/${chapterId}`);
+    } catch (error) {
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch episodes, returning empty:",
+        error,
+      );
+      return [];
+    }
+  }
+
+  async createEpisode(episode: Episode): Promise<string> {
+    const response = await this.request<{ id: string }>(
+      "POST",
+      `/api/episodes/${episode.id}`,
+      episode,
+    );
+    return response.id;
+  }
+
+  async saveEpisode(episode: Episode): Promise<void> {
+    await this.request("POST", `/api/episodes/${episode.id}`, episode);
+  }
+
+  async deleteEpisode(id: string): Promise<void> {
+    await this.request("DELETE", `/api/episodes/${id}`);
+  }
+
+  async getSceneNodes(episodeId?: string): Promise<SceneNode[]> {
+    const endpoint = episodeId
+      ? `/api/episodes/${episodeId}`
+      : "/api/scenenodes";
+    try {
+      return await this.request<SceneNode[]>("GET", endpoint);
+    } catch (error) {
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch scene nodes, returning empty:",
+        error,
+      );
+      return [];
+    }
+  }
+
+  async saveSceneNode(node: SceneNode): Promise<void> {
+    await this.request("POST", "/api/scenenodes", node);
+  }
+
+  async getNodesForChapter(
+    chapterId: string,
+    episodeId?: string,
+  ): Promise<SceneNode[]> {
+    try {
+      // If episodeId exists, use the specific endpoint, otherwise use the chapter endpoint
+      const endpoint = episodeId
+        ? `/api/scenenodes/chapter/${chapterId}/${episodeId}`
+        : `/api/scenenodes/chapter/${chapterId}`;
+
+      return await this.request<SceneNode[]>("GET", endpoint);
+    } catch (error) {
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch scene nodes for chapter/episode, returning empty:",
+        error,
+      );
+      return [];
+    }
+  }
+
+  async deleteSceneNode(id: string): Promise<void> {
+    await this.request("DELETE", `/api/scenenodes/${id}`);
   }
 
   // --- Characters ---
   async getCharacters(): Promise<ExtendedCharacter[]> {
     try {
-      return await this.request<ExtendedCharacter[]>('GET', '/api/characters');
+      return await this.request<ExtendedCharacter[]>("GET", "/api/characters");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch characters, returning empty:', error);
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch characters, returning empty:",
+        error,
+      );
       return [];
     }
   }
 
   async saveCharacter(character: ExtendedCharacter): Promise<void> {
-    await this.request('POST', '/api/characters', character);
+    await this.request("POST", "/api/characters", character);
   }
 
   async deleteCharacter(id: string): Promise<void> {
-    await this.request('DELETE', `/api/characters/${id}`);
+    await this.request("DELETE", `/api/characters/${id}`);
   }
 
   // --- Assets ---
   async getAssets(): Promise<Asset[]> {
     try {
-      return await this.request<Asset[]>('GET', '/api/assets');
+      return await this.request<Asset[]>("GET", "/api/assets");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch assets, returning empty:', error);
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch assets, returning empty:",
+        error,
+      );
       return [];
     }
   }
 
   async saveAsset(asset: Asset): Promise<void> {
-    await this.request('POST', '/api/assets', asset);
+    await this.request("POST", "/api/assets", asset);
   }
 
   async deleteAsset(id: string): Promise<void> {
-    await this.request('DELETE', `/api/assets/${id}`);
-  }
-
-  // --- Events ---
-  async getEvents(): Promise<ScenarioEvent[]> {
-    try {
-      return await this.request<ScenarioEvent[]>('GET', '/api/events');
-    } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch events, returning empty:', error);
-      return [];
-    }
-  }
-
-  async saveEvent(event: ScenarioEvent): Promise<void> {
-    await this.request('PUT', `/api/events/${event.id}`, event);
-  }
-
-  async deleteEvent(id: string): Promise<void> {
-    await this.request('DELETE', `/api/events/${id}`);
+    await this.request("DELETE", `/api/assets/${id}`);
   }
 
   // --- Files ---
   async getFiles(): Promise<FileItem[]> {
     try {
-      return await this.request<FileItem[]>('GET', '/api/files');
+      return await this.request<FileItem[]>("GET", "/api/files");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch files, returning empty:', error);
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch files, returning empty:",
+        error,
+      );
       return [];
     }
   }
 
   async saveFile(file: FileItem): Promise<void> {
-    await this.request('POST', '/api/files', file);
+    await this.request("POST", "/api/files", file);
+  }
+  async deleteFile(id: string): Promise<void> {
+    await this.request("DELETE", `/api/files/${id}`);
   }
 
   // --- Dashboard ---
   async getDashboardStats(): Promise<any> {
     try {
-      return await this.request('GET', '/api/dashboard/stats');
+      return await this.request("GET", "/api/dashboard/stats");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch dashboard stats, returning defaults:', error);
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch dashboard stats, returning defaults:",
+        error,
+      );
       return {
         totalWords: 0,
         assetCount: 0,
-        compileCount: 'v0',
+        compileCount: "v0",
         completionPercentage: 0,
         recentChapters: [],
         recentAssets: [],
@@ -189,19 +277,22 @@ export class SQLiteDatabaseAdapter implements DatabaseAdapter {
   // --- Scratchpad ---
   async getScratchpadItems(): Promise<any[]> {
     try {
-      return await this.request<any[]>('GET', '/api/scratchpad');
+      return await this.request<any[]>("GET", "/api/scratchpad");
     } catch (error) {
-      console.warn('[SQLiteAdapter] Failed to fetch scratchpad items, returning empty:', error);
+      console.warn(
+        "[SQLiteAdapter] Failed to fetch scratchpad items, returning empty:",
+        error,
+      );
       return [];
     }
   }
 
   async saveScratchpadItem(item: any): Promise<string> {
-    await this.request('PUT', `/api/scratchpad/${item.id}`, item);
+    await this.request("PUT", `/api/scratchpad/${item.id}`, item);
     return item.id;
   }
 
   async deleteScratchpadItem(id: string): Promise<void> {
-    await this.request('DELETE', `/api/scratchpad/${id}`);
+    await this.request("DELETE", `/api/scratchpad/${id}`);
   }
 }

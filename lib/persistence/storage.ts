@@ -113,14 +113,14 @@ export class IndexedDBPersistence {
         KNOWN_STORES.forEach(storeName => {
           if (!db.objectStoreNames.contains(storeName)) {
             db.createObjectStore(storeName);
-            console.log(`[IndexedDB] Created object store: ${storeName}`);
+            
           }
         });
 
         // Also create the store for the current instance if not in known list
         if (!db.objectStoreNames.contains(this.storeName) && !KNOWN_STORES.includes(this.storeName)) {
           db.createObjectStore(this.storeName);
-          console.log(`[IndexedDB] Created object store: ${this.storeName}`);
+          
         }
       };
     });

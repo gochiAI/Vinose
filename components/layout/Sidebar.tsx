@@ -61,8 +61,8 @@ export const Sidebar = () => {
       <NavItem 
         icon="account_tree" 
         label="Flow & Script" 
-        active={currentPath === '/chapter-list' || currentPath.startsWith('/chapter') || currentPath.startsWith('/editor')} 
-        onClick={() => navigate('/chapter-list')}
+        active={currentPath === '/chapters' || currentPath.startsWith('/chapter') || currentPath.startsWith('/editor')} 
+        onClick={() => navigate('/chapters')}
       />
       <NavItem 
         icon="group" 

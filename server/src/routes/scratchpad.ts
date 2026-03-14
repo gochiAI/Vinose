@@ -1,41 +1,41 @@
-import express, { Request, Response, Router } from 'express';
-import * as scratchpadDb from '../db/scratchpad';
-import { v4 as uuidv4 } from 'uuid';
+import express, { Request, Response, Router } from "express";
+import * as scratchpadDb from "../db/scratchpad.js";
+import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 
 // GET all scratchpad items
-router.get('/', async (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const items = await scratchpadDb.getScratchpadItems();
     res.json(items);
   } catch (error) {
-    console.error('[Scratchpad] Error fetching items:', error);
-    res.status(500).json({ error: 'Failed to fetch scratchpad items' });
+    console.error("[Scratchpad] Error fetching items:", error);
+    res.status(500).json({ error: "Failed to fetch scratchpad items" });
   }
 });
 
 // GET scratchpad item by id
-router.get('/:id', async (req: Request, res: Response) => {
+router.get("/:id", async (req: Request, res: Response) => {
   try {
     const item = await scratchpadDb.getScratchpadItem(req.params.id);
     if (!item) {
-      return res.status(404).json({ error: 'Scratchpad item not found' });
+      return res.status(404).json({ error: "Scratchpad item not found" });
     }
     res.json(item);
   } catch (error) {
-    console.error('[Scratchpad] Error fetching item:', error);
-    res.status(500).json({ error: 'Failed to fetch scratchpad item' });
+    console.error("[Scratchpad] Error fetching item:", error);
+    res.status(500).json({ error: "Failed to fetch scratchpad item" });
   }
 });
 
 // POST create scratchpad item
-router.post('/', async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   try {
     const { text, completed } = req.body;
 
     if (!text) {
-      return res.status(400).json({ error: 'Missing required field: text' });
+      return res.status(400).json({ error: "Missing required field: text" });
     }
 
     const item: scratchpadDb.ScratchpadItem = {
@@ -49,19 +49,19 @@ router.post('/', async (req: Request, res: Response) => {
     const savedId = await scratchpadDb.saveScratchpadItem(item);
     res.json({ success: true, id: savedId });
   } catch (error) {
-    console.error('[Scratchpad] Error creating item:', error);
-    res.status(500).json({ error: 'Failed to create scratchpad item' });
+    console.error("[Scratchpad] Error creating item:", error);
+    res.status(500).json({ error: "Failed to create scratchpad item" });
   }
 });
 
 // PUT update scratchpad item
-router.put('/:id', async (req: Request, res: Response) => {
+router.put("/:id", async (req: Request, res: Response) => {
   try {
     const { text, completed } = req.body;
 
     const existing = await scratchpadDb.getScratchpadItem(req.params.id);
     if (!existing) {
-      return res.status(404).json({ error: 'Scratchpad item not found' });
+      return res.status(404).json({ error: "Scratchpad item not found" });
     }
 
     const updated: scratchpadDb.ScratchpadItem = {
@@ -74,19 +74,19 @@ router.put('/:id', async (req: Request, res: Response) => {
     await scratchpadDb.saveScratchpadItem(updated);
     res.json({ success: true });
   } catch (error) {
-    console.error('[Scratchpad] Error updating item:', error);
-    res.status(500).json({ error: 'Failed to update scratchpad item' });
+    console.error("[Scratchpad] Error updating item:", error);
+    res.status(500).json({ error: "Failed to update scratchpad item" });
   }
 });
 
 // DELETE scratchpad item
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete("/:id", async (req: Request, res: Response) => {
   try {
     await scratchpadDb.deleteScratchpadItem(req.params.id);
     res.json({ success: true });
   } catch (error) {
-    console.error('[Scratchpad] Error deleting item:', error);
-    res.status(500).json({ error: 'Failed to delete scratchpad item' });
+    console.error("[Scratchpad] Error deleting item:", error);
+    res.status(500).json({ error: "Failed to delete scratchpad item" });
   }
 });
 

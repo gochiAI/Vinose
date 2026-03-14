@@ -1,6 +1,6 @@
 import React from 'react';
 import { MessageSquare } from 'lucide-react';
-import { initialCharacters } from '../../data';
+
 
 interface DialogueBlockProps {
   content: {
@@ -11,7 +11,7 @@ interface DialogueBlockProps {
 }
 
 export const DialogueBlock = ({ content, onChange }: DialogueBlockProps) => {
-  const char = initialCharacters.find(c => c.name === content.character);
+  const char = null; // Replace with character lookup logic
   
   return (
     <div className="flex gap-4 p-4 bg-surface-dark rounded-xl border border-gray-700/50 group hover:border-gray-600 transition-colors shadow-sm">
@@ -28,9 +28,7 @@ export const DialogueBlock = ({ content, onChange }: DialogueBlockProps) => {
            value={content.character}
            onChange={(e) => onChange({ ...content, character: e.target.value })}
          >
-           {initialCharacters.map(c => (
-             <option key={c.id} value={c.name}>{c.name}</option>
-           ))}
+  
            <option value="UNKNOWN">Unknown</option>
          </select>
       </div>

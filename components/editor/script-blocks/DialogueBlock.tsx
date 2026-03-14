@@ -1,17 +1,15 @@
 import React from 'react';
 import { MessageSquare } from 'lucide-react';
-import { initialCharacters } from '../../../data';
+import { ExtendedCharacter, DialogueContent } from '../../../types';
 
 interface DialogueBlockProps {
-  content: {
-    character: string;
-    text: string;
-  };
-  onChange: (content: any) => void;
+  content: DialogueContent;
+  onChange: (content: DialogueContent) => void;
+  characters: ExtendedCharacter[];
 }
 
-export const DialogueBlock = ({ content, onChange }: DialogueBlockProps) => {
-  const char = initialCharacters.find(c => c.name === content.character);
+export const DialogueBlock = ({ content, onChange, characters }: DialogueBlockProps) => {
+  const char = characters.find(c => c.id === content.characterId);
   
   return (
     <div className="flex gap-4 p-4 bg-surface-dark rounded-xl border border-gray-700/50 group hover:border-gray-600 transition-colors shadow-sm">
@@ -25,11 +23,12 @@ export const DialogueBlock = ({ content, onChange }: DialogueBlockProps) => {
          </div>
          <select 
            className="w-full bg-surface-darker text-white text-xs p-1.5 rounded border border-gray-700 outline-none focus:border-primary"
-           value={content.character}
-           onChange={(e) => onChange({ ...content, character: e.target.value })}
+           value={content.characterId}
+           onChange={(e) => onChange({ ...content, characterId: e.target.value })}
          >
-           {initialCharacters.map(c => (
-             <option key={c.id} value={c.name}>{c.name}</option>
+           <option value="">Select Character...</option>
+           {characters.map(c => (
+             <option key={c.id} value={c.id}>{c.name}</option>
            ))}
            <option value="UNKNOWN">Unknown</option>
          </select>

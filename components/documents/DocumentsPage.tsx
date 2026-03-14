@@ -4,7 +4,7 @@ import { ActionEvent } from '../../App';
 import { FileItem, FileType } from '../../types';
 import { DocumentEditor } from './DocumentEditor';
 import { SpreadsheetEditor } from './SpreadsheetEditor';
-import { initialFiles, createMockSheet } from '../../data';
+
 import { Modal } from '../common/Modal';
 import { useDatabase } from '../../contexts/DatabaseContext';
 
@@ -29,7 +29,7 @@ export const DocumentsPage = ({ lastAction }: { lastAction: ActionEvent | null }
         setFiles(loadedFiles);
       } catch (error) {
         console.error('Failed to load files:', error);
-        setFiles(initialFiles);
+        setFiles(null);
       } finally {
         setIsLoading(false);
       }
@@ -202,18 +202,6 @@ export const DocumentsPage = ({ lastAction }: { lastAction: ActionEvent | null }
                 className="pl-9 pr-4 py-1.5 text-sm bg-white dark:bg-surface-dark border border-gray-200 dark:border-white/10 rounded-full focus:ring-1 focus:ring-primary focus:border-primary outline-none text-gray-900 dark:text-white w-64 transition-all"
               />
             </div>
-            <button
-              onClick={() => openModal('doc')}
-              className="ml-2 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded transition-colors"
-            >新規ドキュメント</button>
-            <button
-              onClick={() => openModal('sheet')}
-              className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded transition-colors"
-            >新規スプレッド</button>
-            <button
-              onClick={() => openModal('folder')}
-              className="px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded transition-colors"
-            >新規フォルダ</button>
           </div>
         </div>
       </div>

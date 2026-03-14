@@ -49,7 +49,7 @@ export const Scratchpad = () => {
     };
 
     try {
-      await db.saveScratchpadItem(newTodo);
+      await db.createScratchpadItem(newTodo);
       setTodos([newTodo, ...todos]);
       setNewTaskText('');
     } catch (error) {

@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useMemo, useEffect } from 'react';
 import { DatabaseAdapter } from '../lib/db/types';
-import { MockDatabase } from '../lib/db/mock';
-import { PersistentMockDatabase } from '../lib/persistence/persistent-mock-db';
 import { SQLiteDatabaseAdapter } from '../lib/persistence/sqlite-adapter';
 
 // In the future, import FirestoreAdapter or MongoAdapter here
@@ -25,21 +23,13 @@ export const DatabaseProvider = ({ children }: { children?: React.ReactNode }) =
         timeout: 30000,
       });
     }
-    if (USE_PERSISTENCE) {
-      return new PersistentMockDatabase({
-        enabled: true,
-        autoSave: true,
-        autoSaveInterval: 30000, // Auto-save every 30 seconds
-      });
-    }
-    return new MockDatabase();
   }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (db instanceof PersistentMockDatabase) {
-        db.destroy();
+      if (db) {
+
       }
     };
   }, [db]);
@@ -63,7 +53,7 @@ export const useDatabase = () => {
 export const usePersistence = () => {
   const db = useDatabase();
   
-  if (!(db instanceof PersistentMockDatabase)) {
+  if (!db) {
     return {
       exportData: () => Promise.resolve(null),
       importData: () => Promise.resolve(),
@@ -74,10 +64,6 @@ export const usePersistence = () => {
   }
 
   return {
-    exportData: () => db.exportData(),
-    importData: (data: any) => db.importData(data),
-    clearStorage: () => db.clearStorage(),
-    getSyncQueueSize: () => db.getSyncQueueSize(),
-    getCacheStats: () => db.getCacheStats(),
+
   };
 };

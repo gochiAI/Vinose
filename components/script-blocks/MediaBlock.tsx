@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image as ImageIcon, Music } from 'lucide-react';
-import { initialAssets } from '../../data';
+
 
 interface MediaBlockProps {
   content: {
@@ -12,8 +12,7 @@ interface MediaBlockProps {
 
 export const MediaBlock = ({ content, onChange }: MediaBlockProps) => {
   const isBgm = content.subType === 'bgm';
-  const bgAsset = !isBgm ? initialAssets.find(a => a.name === content.asset) : null;
-
+  const bgAsset =null;
   return (
     <div className={`p-3 rounded-lg border flex items-center gap-4 relative overflow-hidden transition-colors ${isBgm ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-green-900/20 border-green-500/30'}`}>
        {bgAsset?.url && (
@@ -47,9 +46,7 @@ export const MediaBlock = ({ content, onChange }: MediaBlockProps) => {
              onChange={(e) => onChange({ ...content, asset: e.target.value })}
           >
             <option value="">(None)</option>
-            {initialAssets.filter(a => a.type === (isBgm ? 'audio' : 'image')).map(a => (
-               <option key={a.id} value={a.name}>{a.name}</option>
-            ))}
+            {/* アセットのオプションをここに動的に追加 */}
           </select>
        </div>
     </div>

@@ -5,16 +5,18 @@ import { PlaytestOverlay } from './components/layout/PlaytestOverlay';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { EditorView } from './components/editor/EditorView';
 import { ChapterListPage } from './components/chapters/ChapterListPage';
+import { EpisodeListPage } from './components/episodes/EpisodeListPage';
 import { CharactersPage } from './components/characters/CharactersPage';
 import { AssetsPage } from './components/assets/AssetsPage';
 import { DocumentsPage } from './components/documents/DocumentsPage';
 import { SettingsPage } from './components/settings/SettingsPage';
+
 import { HeaderInfo, SceneNode } from './types';
 import { DatabaseProvider, useDatabase } from './contexts/DatabaseContext';
 import { BackendStatusProvider } from './contexts/BackendStatusContext';
 import { Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 
-export type ViewState = 'dashboard' | 'chapterList' | 'editor' | 'chapter' | 'characters' | 'assets' | 'documents' | 'settings';
+export type ViewState = 'dashboard' | 'chapters' | 'editor' | 'characters' | 'assets' | 'documents' | 'settings' ;
 
 export interface ActionEvent {
   type: string;
@@ -22,21 +24,42 @@ export interface ActionEvent {
 }
 
 // EditorView wrapper that handles chapter loading based on chapterId
-const EditorViewWrapper = ({ onHeaderChange, nodes, setNodes, db, selectedChapterId, setSelectedChapterId, onNodeSelect }: { onHeaderChange?: (info: HeaderInfo) => void; nodes: SceneNode[]; setNodes: (nodes: SceneNode[]) => void; db: any; selectedChapterId: string; setSelectedChapterId: (id: string) => void; onNodeSelect?: (nodeId: string) => void }) => {
-  const { chapterId } = useParams<{ chapterId: string }>();
+const EditorViewWrapper = ({ 
+  onHeaderChange, 
+  nodes, 
+  setNodes, 
+  db, 
+  selectedChapterId, 
+  setSelectedChapterId, 
+  onNodeSelect 
+}: { 
+  onHeaderChange?: (info: HeaderInfo) => void; 
+  nodes: SceneNode[]; 
+  setNodes: (nodes: SceneNode[]) => void; 
+  db: any; 
+  selectedChapterId: string; 
+  setSelectedChapterId: (id: string) => void; 
+  onNodeSelect?: (nodeId: string) => void 
+}) => {
+  // 1. Extract episodeId from params
+  const { chapterId, episodeId } = useParams<{ chapterId: string; episodeId?: string }>();
   const [isLoading, setIsLoading] = React.useState(false);
-  const [loadedChapterId, setLoadedChapterId] = React.useState<string | null>(null);
+  const [loadedContext, setLoadedContext] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const loadChapterNodes = async () => {
-      if (!chapterId || loadedChapterId === chapterId) return;
+      // Create a unique key to track if we need to reload (Chapter + Episode combo)
+      const currentContextKey = `${chapterId}-${episodeId || 'all'}`;
+
+      if (!chapterId || loadedContext === currentContextKey) return;
       
       setIsLoading(true);
       try {
-        // Load all nodes for this chapter
-        const chapterNodes = await db.getNodesForChapter(chapterId);
+        // 2. Pass episodeId to the DB call
+        const chapterNodes = await db.getNodesForChapter(chapterId, episodeId);
         setNodes(chapterNodes);
-        setLoadedChapterId(chapterId);
+        
+        setLoadedContext(currentContextKey);
         setSelectedChapterId(chapterId);
       } catch (error) {
         console.error('Failed to load chapter nodes:', error);
@@ -46,7 +69,7 @@ const EditorViewWrapper = ({ onHeaderChange, nodes, setNodes, db, selectedChapte
     };
 
     loadChapterNodes();
-  }, [chapterId]);
+  }, [chapterId, episodeId]);
 
   if (isLoading) {
     return (
@@ -56,13 +79,14 @@ const EditorViewWrapper = ({ onHeaderChange, nodes, setNodes, db, selectedChapte
     );
   }
 
-  return <EditorView onHeaderChange={onHeaderChange} nodes={nodes} setNodes={setNodes} chapterId={chapterId} onNodeSelect={onNodeSelect} />;
+  return <EditorView onHeaderChange={onHeaderChange} nodes={nodes} setNodes={setNodes} chapterId={chapterId} episodeId={episodeId} onNodeSelect={onNodeSelect} />;
 };
 
 const AppContent = () => {
   const db = useDatabase();
   const [nodes, setNodes] = useState<SceneNode[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string>('');
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>('');
   const [selectedChapterId, setSelectedChapterId] = useState<string>('');
   const [isPlaytesting, setIsPlaytesting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -70,6 +94,11 @@ const AppContent = () => {
   const [headerInfo, setHeaderInfo] = useState<HeaderInfo | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // ページ遷移時にlastActionをクリア
+  useEffect(() => {
+    setLastAction(null);
+  }, [location.pathname]);
 
   // Get current view from location pathname
   const getCurrentView = (): ViewState => {
@@ -79,7 +108,7 @@ const AppContent = () => {
     if (path === '/assets') return 'assets';
     if (path === '/documents') return 'documents';
     if (path === '/settings') return 'settings';
-    if (path === '/chapter-list') return 'chapterList';
+    if (path === '/chapters') return 'chapters';
     if (path.startsWith('/editor/')) return 'editor';
     return 'dashboard';
   };
@@ -89,19 +118,19 @@ const AppContent = () => {
     const loadInitialData = async () => {
       // URLにchapterIdが指定されている場合（エディター画面）はスキップ
       if (location.pathname.startsWith('/editor/')) {
-        console.log('[App] Skipping initial load - already in editor view');
+        
         return;
       }
 
       setIsLoading(true);
       try {
         const chapters = await db.getChapters();
-        console.log('[App] Initial load - chapters:', chapters.map(ch => ({ id: ch.id, title: ch.title })));
+        
         
         const allNodes = await Promise.all(
           chapters.map(ch => db.getNodesForChapter(ch.id))
         ).then(results => results.flat());
-        console.log('[App] Initial load - allNodes loaded:', allNodes.length, 'nodes');
+        
         
         if (allNodes.length === 0) {
           console.warn('No nodes found for the chapters');
@@ -116,9 +145,10 @@ const AppContent = () => {
           const currentTime = new Date(current.updatedAt || 0).getTime();
           return currentTime > latestTime ? current : latest;
         });
-        console.log('[App] Initial load - lastEditedScene:', { id: lastEditedScene.id, chapterId: lastEditedScene.chapterId, title: lastEditedScene.title });
+        
         
         setSelectedNodeId(lastEditedScene.id);
+        setSelectedEpisodeId(lastEditedScene.episodeId || '');
         setSelectedChapterId(lastEditedScene.chapterId || '');
         
         // ヘッダー情報を初期化
@@ -126,6 +156,7 @@ const AppContent = () => {
         setHeaderInfo({
           title: lastEditedScene.title || 'Untitled Scene',
           chapter: currentChapter?.title || 'Unknown Chapter',
+          episode: lastEditedScene.title || '', // エピソード情報はここでは不明
           scene: lastEditedScene.title || 'Start'
         });
       } catch (e) {
@@ -145,23 +176,24 @@ const AppContent = () => {
         return;
       }
 
-      console.log('[App] updateHeaderInfo - selectedNodeId:', selectedNodeId, 'selectedChapterId:', selectedChapterId);
+      
       if (!selectedNodeId || !selectedChapterId) return;
 
       try {
         // 現在のシーン情報を取得
         const currentScene = nodes.find(n => n.id === selectedNodeId);
-        console.log('[App] updateHeaderInfo - currentScene found:', !!currentScene, currentScene?.title);
+        
         if (!currentScene) return;
 
         // チャプター情報を取得
         const chapters = await db.getChapters();
         const currentChapter = chapters.find(ch => ch.id === selectedChapterId);
-        console.log('[App] updateHeaderInfo - currentChapter found:', currentChapter?.title);
+        
 
         setHeaderInfo({
-          title: currentScene.title || 'Untitled Scene',
+          title:  currentChapter?.title || 'Untitled Scene',
           chapter: currentChapter?.title || 'Unknown Chapter',
+          episode: '', // エピソード情報はここでは不明
           scene: currentScene.title || 'Start'
         });
       } catch (e) {
@@ -179,7 +211,7 @@ const AppContent = () => {
 
   // chapter選択時の遷移例
   const handleChapterSelect = async (chapterName: string) => {
-    navigate(`/editor/${encodeURIComponent(chapterName)}`);
+    navigate(`/chapters/${encodeURIComponent(chapterName)}`);
   };
 
   // scriptエクスポート
@@ -203,7 +235,7 @@ const AppContent = () => {
   // TopBarアクション
   const handleAction = (actionType: string) => {
     if (actionType === 'CONTINUE_EDITING') {
-      navigate('/editor/' + selectedChapterId);
+      navigate('/chapters/' + selectedChapterId);
     } else if (actionType === 'PLAYTEST_SCENE') {
       setIsPlaytesting(true);
     } else if (actionType === 'EXPORT_SCRIPT') {
@@ -218,7 +250,7 @@ const AppContent = () => {
   
   return (
     <div className="flex h-full w-full bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display transition-colors duration-200">
-      <Sidebar currentView={''} onNavigate={handleNavigate} />
+      <Sidebar />
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         <TopBar view={currentView} headerInfo={headerInfo || { title: '', chapter: '', scene: '' }} onAction={handleAction} onNavigate={handleNavigate} />
         {isLoading && (
@@ -230,7 +262,7 @@ const AppContent = () => {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={
             <div className="flex-1 overflow-y-auto p-6 lg:p-8 scroll-smooth">
-              <Dashboard onNavigate={() => navigate('/chapter-list')} />
+              <Dashboard onNavigate={() => navigate('/chapters')} />
               <div className="mt-8 flex justify-between items-center text-xs text-gray-500 dark:text-gray-600 border-t border-gray-200 dark:border-white/5 pt-4">
                 <p>Eternal Echoes Engine v2.1.0</p>
                 <div className="flex gap-4">
@@ -240,8 +272,9 @@ const AppContent = () => {
               </div>
             </div>
           } />
-          <Route path="/chapter-list" element={<ChapterListPage onSelectChapter={handleChapterSelect} />} />
-          <Route path="/editor/:chapterId" element={<EditorViewWrapper onHeaderChange={setHeaderInfo} nodes={nodes} setNodes={updateNodes} db={db} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} onNodeSelect={setSelectedNodeId} />} />
+          <Route path="/chapters" element={<ChapterListPage />} />
+          <Route path="/chapters/:chapterId" element={<EpisodeListPage />} />
+          <Route path="/editor/:chapterId/:episodeId" element={<EditorViewWrapper onHeaderChange={setHeaderInfo} nodes={nodes} setNodes={updateNodes} db={db} selectedChapterId={selectedChapterId} setSelectedChapterId={setSelectedChapterId} onNodeSelect={setSelectedNodeId} />} />
           <Route path="/characters" element={<CharactersPage lastAction={lastAction} />} />
           <Route path="/assets" element={<AssetsPage lastAction={lastAction} />} />
           <Route path="/documents" element={<DocumentsPage lastAction={lastAction} />} />

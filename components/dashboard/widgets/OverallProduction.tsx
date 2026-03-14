@@ -23,9 +23,7 @@ export const OverallProduction = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        console.log('[OverallProduction] Fetching dashboard stats...');
         const dashboardStats = await db.getDashboardStats();
-        console.log('[OverallProduction] Stats received:', dashboardStats);
         setStats({
           totalWords: dashboardStats.totalWords || 0,
           weeklyWordsAdded: dashboardStats.weeklyWordsAdded || 0,

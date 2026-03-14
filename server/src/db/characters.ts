@@ -1,20 +1,5 @@
-import { db } from './connection';
-
-export interface ExtendedCharacter {
-  id: string;
-  name: string;
-  role: string;
-  age: string;
-  height: string;
-  avatarUrl: string;
-  coverUrl: string;
-  description: string;
-  relationships: { target: string; type: string; desc: string }[];
-  notes: string[];
-  tags: string[];
-  createdAt?: string;
-  updatedAt?: string;
-}
+import { db } from './connection.js';
+import type { ExtendedCharacter } from '../types.js';
 
 export async function getCharacters(): Promise<ExtendedCharacter[]> {
   const rows = await db.all<any>(
@@ -91,8 +76,8 @@ export async function saveCharacter(character: ExtendedCharacter): Promise<void>
     // Insert
     await db.run(
       `INSERT INTO characters 
-        (id, name, role, age, height, avatar_url, cover_url, description, relationships, notes, tags)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, name, role, age, height, avatar_url, cover_url, description, relationships, notes, tags, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [
         character.id,
         character.name,

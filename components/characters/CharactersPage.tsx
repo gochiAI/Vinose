@@ -1,9 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { z } from 'zod';
 import { ActionEvent } from '../../App';
-import { ExtendedCharacter } from '../../types';
+import { ExtendedCharacter, Asset } from '../../types';
 import { Modal } from '../common/Modal';
+import { AssetPickerModal } from '../common/AssetPickerModal';
 import { Input, Label, TextArea } from '../common/Form';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { useDatabase } from '../../contexts/DatabaseContext';
+
+// バリデーションスキーマ
+const characterSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100, 'Name is too long'),
+  role: z.string().min(1, 'Role is required').max(100, 'Role is too long'),
+  age: z.string().min(1, 'Age is required'),
+  height: z.string().min(1, 'Height is required'),
+  description: z.string().min(1, 'Description is required'),
+});
 
 export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null }) => {
   const db = useDatabase();
@@ -12,31 +24,37 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [processedActionTimestamp, setProcessedActionTimestamp] = useState<number | null>(null);
+
+  // ユーティリティ: 逆方向の関係を取得 (useMemoで最適化)
+  const reverseRelationships = useMemo(() => {
+    if (!selectedCharId) return [];
+    return characters
+      .filter(char => char.relationships.some(rel => rel.targetId === selectedCharId))
+      .flatMap(char => 
+        char.relationships
+          .filter(rel => rel.targetId === selectedCharId)
+          .map(rel => ({
+            fromChar: char,
+            relationship: rel
+          }))
+      );
+  }, [characters, selectedCharId]);
   
   // Modal State
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<ExtendedCharacter | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetPickerTarget, setAssetPickerTarget] = useState<'avatar' | 'cover'>('avatar');
+  const [assets, setAssets] = useState<Asset[]>([]);
 
   useEffect(() => {
     loadCharacters();
+    loadAssets();
   }, [db]);
 
-  const loadCharacters = async () => {
-    setLoading(true);
-    const data = await db.getCharacters();
-    setCharacters(data);
-    setLoading(false);
-  };
-
   const selectedChar = characters.find(c => c.id === selectedCharId);
-
-  // Listen for actions from TopBar - only process new actions (by timestamp)
-  useEffect(() => {
-    if (lastAction?.type === 'ADD_CHARACTER' && lastAction.timestamp !== processedActionTimestamp) {
-      handleAddNew();
-      setProcessedActionTimestamp(lastAction.timestamp);
-    }
-  }, [lastAction, processedActionTimestamp]);
 
   const handleAddNew = () => {
     const newChar: ExtendedCharacter = {
@@ -56,6 +74,32 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
     setIsEditing(true);
   };
 
+  // Handle actions from TopBar
+  useEffect(() => {
+    if (lastAction && lastAction.timestamp !== processedActionTimestamp) {
+      if (lastAction.type === 'ADD_CHARACTER') {
+        handleAddNew();
+      }
+      setProcessedActionTimestamp(lastAction.timestamp);
+    }
+  }, [lastAction, processedActionTimestamp]);
+
+  const loadCharacters = async () => {
+    setLoading(true);
+    const data = await db.getCharacters();
+    setCharacters(data);
+    setLoading(false);
+  };
+
+  const loadAssets = async () => {
+    try {
+      const data = await db.getAssets();
+      setAssets(data);
+    } catch (error) {
+      console.error('Failed to load assets:', error);
+    }
+  };
+
   const handleEditCurrent = () => {
     if (selectedChar) {
       setEditForm({ ...selectedChar });
@@ -66,6 +110,29 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
   const handleSave = async () => {
     if (!editForm) return;
     
+    // バリデーション
+    try {
+      characterSchema.parse({
+        name: editForm.name,
+        role: editForm.role,
+        age: editForm.age,
+        height: editForm.height,
+        description: editForm.description,
+      });
+      setValidationErrors({}); // クリアする
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errors: Record<string, string> = {};
+        error.issues.forEach(err => {
+          if (err.path[0]) {
+            errors[err.path[0].toString()] = err.message;
+          }
+        });
+        setValidationErrors(errors);
+        return;
+      }
+    }
+    
     // Optimistic Update
     const isNew = !characters.some(c => c.id === editForm.id);
     setCharacters(prev => {
@@ -74,21 +141,62 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
     });
 
     // DB Update
-    await db.saveCharacter(editForm);
+    try {
+      await db.saveCharacter(editForm);
+    } catch (error) {
+      // エラー時にロールバック
+      if (isNew) {
+        setCharacters(prev => prev.filter(c => c.id !== editForm.id));
+      } else {
+        const originalChar = characters.find(c => c.id === editForm.id);
+        if (originalChar) {
+          setCharacters(prev => prev.map(c => c.id === editForm.id ? originalChar : c));
+        }
+      }
+      console.error('Failed to save character:', error);
+      alert('Failed to save character. Please try again.');
+      return;
+    }
 
     setIsEditing(false);
+    setEditForm(null);
     setSelectedCharId(editForm.id);
   };
 
   const handleDelete = async () => {
     if (!selectedCharId) return;
-    if (confirm('Are you sure you want to delete this character?')) {
+    
+    // 削除対象のキャラクターを保存（ロールバック用）
+    const deletedChar = characters.find(c => c.id === selectedCharId);
+    
+    // 楽観的更新：先にUIから削除
+    setCharacters(prev => prev.filter(c => c.id !== selectedCharId));
+    setSelectedCharId(null);
+    setIsEditing(false);
+    setShowDeleteConfirm(false);
+    
+    // DB削除処理
+    try {
       await db.deleteCharacter(selectedCharId);
-      setCharacters(prev => prev.filter(c => c.id !== selectedCharId));
-      setSelectedCharId(null);
-      setIsEditing(false);
+    } catch (error) {
+      // エラー時にロールバック
+      if (deletedChar) {
+        setCharacters(prev => [...prev, deletedChar]);
+        setSelectedCharId(deletedChar.id);
+      }
+      console.error('Failed to delete character:', error);
+      alert('Failed to delete character. Please try again.');
     }
   };
+
+    const handleAssetSelect = (url: string) => {
+      if (!editForm) return;
+      if (assetPickerTarget === 'avatar') {
+        setEditForm({ ...editForm, avatarUrl: url });
+      } else {
+        setEditForm({ ...editForm, coverUrl: url });
+      }
+    };
 
   const filteredCharacters = characters.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -233,26 +341,63 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
 
                        {/* Connections */}
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                          {selectedChar.relationships.map((rel, idx) => (
+                          {selectedChar.relationships.map((rel, idx) => {
+                             const targetChar = characters.find(c => c.id === rel.targetId);
+                             return (
                              <div key={idx} className="flex items-center gap-3 p-3 bg-white dark:bg-black/20 rounded border border-gray-200 dark:border-white/5 relative group">
                                 {/* Connector Line Visual */}
                                 <div className="absolute left-1/2 -top-4 w-px h-4 bg-gray-300 dark:bg-white/20 md:hidden"></div>
                                 
                                 <div className="size-10 rounded-full bg-gray-700 bg-cover bg-top shrink-0 flex items-center justify-center" 
-                                     style={{ backgroundImage: `url('${characters.find(c => c.name === rel.target)?.avatarUrl || ''}')` }}>
-                                     {!characters.find(c => c.name === rel.target)?.avatarUrl && <span className="material-symbols-outlined text-xs text-gray-500">person</span>}
+                                     style={{ backgroundImage: targetChar?.avatarUrl ? `url('${targetChar.avatarUrl}')` : undefined }}>
+                                     {!targetChar?.avatarUrl && <span className="material-symbols-outlined text-xs text-gray-500">person</span>}
                                 </div>
                                 <div>
                                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{rel.type}</div>
-                                   <div className="font-bold text-gray-900 dark:text-white">{rel.target}</div>
+                                   <div className="font-bold text-gray-900 dark:text-white">{targetChar?.name || '(Unknown)'}</div>
                                    <div className="text-xs text-gray-500 italic">"{rel.desc}"</div>
                                 </div>
                              </div>
-                          ))}
+                             );
+                          })}
                        </div>
                     </div>
                   </div>
                 </section>
+
+                {/* Mutual Relationships Section */}
+                {reverseRelationships.length > 0 && (
+                  <section>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-amber-500">sync_alt</span>
+                      How Others See {selectedChar.name}
+                    </h3>
+                    <div className="bg-surface-light dark:bg-surface-dark p-4 rounded-lg border border-gray-200 dark:border-white/5">
+                      <div className="space-y-3">
+                        {reverseRelationships.map((item, idx) => (
+                          <div 
+                            key={idx} 
+                            className="flex items-center gap-3 p-3 bg-white dark:bg-black/20 rounded border border-gray-200 dark:border-white/5 hover:border-primary/30 dark:hover:border-primary/30 transition-colors cursor-pointer"
+                            onClick={() => setSelectedCharId(item.fromChar.id)}
+                          >
+                            <div className="size-10 rounded-full bg-gray-700 bg-cover bg-top shrink-0 flex items-center justify-center" 
+                                 style={{ backgroundImage: item.fromChar.avatarUrl ? `url('${item.fromChar.avatarUrl}')` : undefined }}>
+                                 {!item.fromChar.avatarUrl && <span className="material-symbols-outlined text-xs text-gray-500">person</span>}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                               <div className="font-bold text-gray-900 dark:text-white">{item.fromChar.name}</div>
+                               <div className="text-xs text-gray-500 dark:text-gray-400">
+                                 <span className="font-semibold text-amber-600 dark:text-amber-400 uppercase">{item.relationship.type}</span>
+                                 {item.relationship.desc && <span className="italic ml-1">"{item.relationship.desc}"</span>}
+                               </div>
+                            </div>
+                            <span className="material-symbols-outlined text-gray-400 text-[16px]">arrow_forward</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                )}
               </div>
 
               {/* Sidebar Column */}
@@ -297,18 +442,22 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
       {/* Edit Modal */}
       <Modal
         isOpen={isEditing && !!editForm}
-        onClose={() => setIsEditing(false)}
+        onClose={() => {
+          setIsEditing(false);
+          setEditForm(null);
+          setValidationErrors({});
+        }}
         title={editForm && characters.some(c => c.id === editForm.id) ? 'Edit Character' : 'New Character'}
         footer={
            editForm && (
               <>
                {characters.some(c => c.id === editForm.id) ? (
-                 <button onClick={handleDelete} className="text-red-400 hover:text-red-300 font-bold px-4 py-2 hover:bg-red-900/20 rounded">Delete</button>
+                 <button onClick={() => setShowDeleteConfirm(true)} className="text-red-400 hover:text-red-300 font-bold px-4 py-2 hover:bg-red-900/20 rounded">Delete</button>
                ) : (
                  <div></div>
                )}
                <div className="flex gap-3">
-                 <button onClick={() => setIsEditing(false)} className="px-4 py-2 text-gray-300 hover:bg-white/5 rounded">Cancel</button>
+                 <button onClick={() => { setIsEditing(false); setEditForm(null); setValidationErrors({}); }} className="px-4 py-2 text-gray-300 hover:bg-white/5 rounded">Cancel</button>
                  <button onClick={handleSave} className="px-6 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded shadow-lg shadow-primary/20">Save Character</button>
                </div>
              </>
@@ -320,34 +469,125 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
                 <div className="grid grid-cols-2 gap-4">
                    <div>
                      <Label>Name</Label>
-                     <Input type="text" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                     <Input 
+                       type="text" 
+                       value={editForm.name} 
+                       onChange={e => setEditForm({...editForm, name: e.target.value})} 
+                       className={validationErrors.name ? 'border-red-500' : ''}
+                     />
+                     {validationErrors.name && (
+                       <p className="text-red-400 text-xs mt-1">{validationErrors.name}</p>
+                     )}
                    </div>
                    <div>
                      <Label>Role</Label>
-                     <Input type="text" value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} />
+                     <Input 
+                       type="text" 
+                       value={editForm.role} 
+                       onChange={e => setEditForm({...editForm, role: e.target.value})} 
+                       className={validationErrors.role ? 'border-red-500' : ''}
+                     />
+                     {validationErrors.role && (
+                       <p className="text-red-400 text-xs mt-1">{validationErrors.role}</p>
+                     )}
                    </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                    <div>
                      <Label>Age</Label>
-                     <Input type="text" value={editForm.age} onChange={e => setEditForm({...editForm, age: e.target.value})} />
+                     <Input 
+                       type="text" 
+                       value={editForm.age} 
+                       onChange={e => setEditForm({...editForm, age: e.target.value})} 
+                       className={validationErrors.age ? 'border-red-500' : ''}
+                     />
+                     {validationErrors.age && (
+                       <p className="text-red-400 text-xs mt-1">{validationErrors.age}</p>
+                     )}
                    </div>
                    <div>
                      <Label>Height</Label>
-                     <Input type="text" value={editForm.height} onChange={e => setEditForm({...editForm, height: e.target.value})} />
+                     <Input 
+                       type="text" 
+                       value={editForm.height} 
+                       onChange={e => setEditForm({...editForm, height: e.target.value})} 
+                       className={validationErrors.height ? 'border-red-500' : ''}
+                     />
+                     {validationErrors.height && (
+                       <p className="text-red-400 text-xs mt-1">{validationErrors.height}</p>
+                     )}
                    </div>
                 </div>
                  <div>
                      <Label>Avatar URL</Label>
-                     <Input type="text" value={editForm.avatarUrl} onChange={e => setEditForm({...editForm, avatarUrl: e.target.value})} />
+                     <div className="flex gap-2">
+                       <Input 
+                         type="text" 
+                         value={editForm.avatarUrl} 
+                         onChange={e => setEditForm({...editForm, avatarUrl: e.target.value})} 
+                         className="flex-1"
+                       />
+                       <button
+                         type="button"
+                         onClick={() => {
+                           setAssetPickerTarget('avatar');
+                           setShowAssetPicker(true);
+                         }}
+                         className="px-3 py-2 bg-surface-dark hover:bg-white/10 border border-gray-700 rounded text-white text-sm font-medium transition-colors flex items-center gap-2"
+                       >
+                         <span className="material-symbols-outlined text-[18px]">photo_library</span>
+                         Library
+                       </button>
+                     </div>
+                     {editForm.avatarUrl && (
+                       <div className="mt-2 w-20 h-20 rounded-lg bg-gray-800 bg-cover bg-center border border-gray-700" style={{ backgroundImage: `url('${editForm.avatarUrl}')` }}></div>
+                     )}
                  </div>
                  <div>
                      <Label>Cover URL</Label>
-                     <Input type="text" value={editForm.coverUrl} onChange={e => setEditForm({...editForm, coverUrl: e.target.value})} />
+                     <div className="flex gap-2">
+                       <Input 
+                         type="text" 
+                         value={editForm.coverUrl} 
+                         onChange={e => setEditForm({...editForm, coverUrl: e.target.value})} 
+                         className="flex-1"
+                       />
+                       <button
+                         type="button"
+                         onClick={() => {
+                           setAssetPickerTarget('cover');
+                           setShowAssetPicker(true);
+                         }}
+                         className="px-3 py-2 bg-surface-dark hover:bg-white/10 border border-gray-700 rounded text-white text-sm font-medium transition-colors flex items-center gap-2"
+                       >
+                         <span className="material-symbols-outlined text-[18px]">photo_library</span>
+                         Library
+                       </button>
+                     </div>
+                     {editForm.coverUrl && (
+                       <div className="mt-2 w-full h-24 rounded-lg bg-gray-800 bg-cover bg-center border border-gray-700" style={{ backgroundImage: `url('${editForm.coverUrl}')` }}></div>
+                     )}
                  </div>
                  <div>
                      <Label>Description</Label>
-                     <TextArea className="h-24" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} />
+                     <TextArea 
+                       className={`h-24 ${validationErrors.description ? 'border-red-500' : ''}`} 
+                       value={editForm.description} 
+                       onChange={e => setEditForm({...editForm, description: e.target.value})} 
+                     />
+                     {validationErrors.description && (
+                       <p className="text-red-400 text-xs mt-1">{validationErrors.description}</p>
+                     )}
+                 </div>
+                 
+                 <div>
+                     <Label>Tags (comma separated)</Label>
+                     <Input 
+                       type="text" 
+                       value={editForm.tags.join(', ')} 
+                       onChange={e => setEditForm({...editForm, tags: e.target.value.split(',').map(t => t.trim()).filter(t => t.length > 0)})} 
+                       placeholder="e.g. Protagonist, Student, Kind"
+                     />
                  </div>
 
                  {/* Relationships Editor */}
@@ -355,7 +595,7 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
                     <div className="flex justify-between items-center mb-2">
                        <Label>Relationships</Label>
                        <button 
-                         onClick={() => setEditForm({...editForm, relationships: [...editForm.relationships, { target: '', type: 'Friend', desc: '' }]})}
+                         onClick={() => setEditForm({...editForm, relationships: [...editForm.relationships, { targetId: '', type: 'friend', desc: '' }]})}
                          className="text-xs text-primary hover:text-white"
                        >
                          + Add Relation
@@ -368,29 +608,41 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
                             <div className="flex gap-2">
                                <div className="flex-1">
                                   <label className="text-[10px] text-gray-500 uppercase">Target Character</label>
-                                  <Input 
-                                    className="p-1.5 text-xs"
-                                    placeholder="Character Name"
-                                    value={rel.target}
+                                  <select
+                                    className="w-full p-1.5 text-xs bg-surface-darker border border-gray-700 rounded text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                                    value={rel.targetId}
                                     onChange={(e) => {
                                        const newRels = [...editForm.relationships];
-                                       newRels[index] = { ...rel, target: e.target.value };
+                                       newRels[index] = { ...rel, targetId: e.target.value };
                                        setEditForm({ ...editForm, relationships: newRels });
                                     }}
-                                  />
+                                  >
+                                    <option value="">Select a character...</option>
+                                    {characters.filter(c => c.id !== editForm.id).map(char => (
+                                      <option key={char.id} value={char.id}>{char.name}</option>
+                                    ))}
+                                  </select>
                                </div>
                                <div className="flex-1">
                                   <label className="text-[10px] text-gray-500 uppercase">Type</label>
-                                  <Input 
-                                    className="p-1.5 text-xs"
-                                    placeholder="e.g. Friend"
+                                  <select
+                                    className="w-full p-1.5 text-xs bg-surface-darker border border-gray-700 rounded text-white focus:ring-1 focus:ring-primary focus:border-primary outline-none"
                                     value={rel.type}
                                     onChange={(e) => {
                                        const newRels = [...editForm.relationships];
                                        newRels[index] = { ...rel, type: e.target.value };
                                        setEditForm({ ...editForm, relationships: newRels });
                                     }}
-                                  />
+                                  >
+                                    <option value="friend">Friend</option>
+                                    <option value="enemy">Enemy</option>
+                                    <option value="rival">Rival</option>
+                                    <option value="love">Love</option>
+                                    <option value="family">Family</option>
+                                    <option value="mentor">Mentor</option>
+                                    <option value="student">Student</option>
+                                    <option value="colleague">Colleague</option>
+                                  </select>
                                </div>
                                <button 
                                  onClick={() => {
@@ -425,6 +677,43 @@ export const CharactersPage = ({ lastAction }: { lastAction: ActionEvent | null 
              </div>
         )}
       </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleDelete}
+        title="Delete Character"
+        message="Are you sure you want to delete this character?"
+        description="This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      >
+        {editForm && (
+          <div className="flex items-center gap-3 p-3 bg-black/20 rounded border border-gray-700">
+            <div className="size-12 rounded-full bg-gray-700 bg-cover bg-top shrink-0 flex items-center justify-center" 
+                 style={{ backgroundImage: editForm.avatarUrl ? `url('${editForm.avatarUrl}')` : undefined }}>
+              {!editForm.avatarUrl && <span className="material-symbols-outlined text-gray-500">person</span>}
+            </div>
+            <div>
+              <div className="font-bold text-white">{editForm.name}</div>
+              <div className="text-sm text-gray-400">{editForm.role}</div>
+            </div>
+          </div>
+        )}
+      </ConfirmDialog>
+
+      {/* Asset Picker Modal */}
+      <AssetPickerModal
+        isOpen={showAssetPicker}
+        onClose={() => setShowAssetPicker(false)}
+        onSelect={handleAssetSelect}
+        assets={assets}
+        initialFilter={assetPickerTarget === 'avatar' ? 'sprite' : 'bg'}
+        selectedUrl={assetPickerTarget === 'avatar' ? editForm?.avatarUrl : editForm?.coverUrl}
+        title={assetPickerTarget === 'avatar' ? 'Select Avatar Image' : 'Select Cover Image'}
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import express, { Request, Response, Router } from 'express';
 import * as chaptersDb from '../db/chapters';
+import type { Chapter } from '../types';
 
 const router = Router();
 
@@ -37,12 +38,11 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing required fields: id, title' });
     }
 
-    const chapter: chaptersDb.Chapter = {
+    const chapter: Chapter = {
       id,
       title,
       sceneCount: sceneCount || 0,
       status: status || 'draft',
-      lastEdited: new Date().toISOString(),
       createdAt: '',
       updatedAt: '',
     };
@@ -65,12 +65,11 @@ router.put('/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Chapter not found' });
     }
 
-    const updated: chaptersDb.Chapter = {
+    const updated: Chapter = {
       ...existing,
       title: title || existing.title,
       sceneCount: sceneCount !== undefined ? sceneCount : existing.sceneCount,
       status: status || existing.status,
-      lastEdited: new Date().toISOString(),
     };
 
     await chaptersDb.saveChapter(updated);

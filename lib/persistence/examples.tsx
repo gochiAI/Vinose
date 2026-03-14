@@ -154,7 +154,7 @@ export function usePersistenceDebug() {
       const stats = getCacheStats();
       const queueSize = getSyncQueueSize();
       
-      console.log('[Persistence Debug]', {
+      
         cacheItems: stats.itemCount,
         cacheMemory: `${(stats.memorySize / 1024).toFixed(2)}KB`,
         pendingOps: queueSize,
